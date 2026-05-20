@@ -1,0 +1,618 @@
+﻿import { useState, useMemo, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+/* ================================================================
+   LE BLANC CRM — Pipeline de Vendas
+   Stack: React + Vite + Supabase Auth + Netlify
+   ================================================================ */
+
+const SUPABASE_URL = "https://kptgtftvyiyxynxkpmaw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwdGd0ZnR2eWl5eHlueGtwbWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxOTQwOTUsImV4cCI6MjA4NDc3MDA5NX0.PTARgU61ku6He-WTza6k3muDeAuTsP21yjODbraXxr0";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const STAGES = [
+  { id: "novo",        label: "Novo do SDR",      color: "#6a8cad" },
+  { id: "qualificado", label: "Qualificado",      color: "#c9a84c" },
+  { id: "atendimento", label: "Em atendimento",   color: "#e8c462" },
+  { id: "visita",      label: "Visita / Projeto",  color: "#d4904c" },
+  { id: "proposta",    label: "Proposta",          color: "#d47a4c" },
+  { id: "fechado",     label: "Fechado",           color: "#6aab7a" },
+];
+
+const VENDOR_MAP = {
+  Tayne:   { color: "#c9a84c", initials: "TA" },
+  Murilo:  { color: "#7aa0c9", initials: "MU" },
+  Vanessa: { color: "#d98b9e", initials: "VA" },
+  Nicolle: { color: "#b89cd9", initials: "NI" },
+  Bruna:   { color: "#7ecbc0", initials: "BR" },
+  Andre:   { color: "#e8a87c", initials: "AN" },
+};
+
+const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
+const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
+
+/* ── CSS ─────────────────────────────────────────────────── */
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --bg:#0b0a08;--surface:#131110;--s2:#191611;--card:#1d1b16;
+    --card-h:#242018;--border:#2a2520;--border2:#38322a;
+    --gold:#c9a84c;--gold-l:#e8c97a;--gold-d:rgba(201,168,76,0.12);
+    --gold-b:rgba(201,168,76,0.28);
+    --text:#f0ece2;--text-m:#b0a890;--text-d:#716857;
+    --hot:#d95b3e;--hot-bg:rgba(217,91,62,0.12);
+    --warm:#d4a04c;--warm-bg:rgba(212,160,76,0.10);
+    --cold:#6b8fa8;--cold-bg:rgba(107,143,168,0.10);
+    --green:#6aab7a;--blue:#7aa0c9;--r:6px;--r2:10px;
+  }
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+
+  /* LOGIN */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);
+    background-image:radial-gradient(800px 600px at 20% 30%,rgba(201,168,76,0.06),transparent 70%),
+    radial-gradient(600px 400px at 80% 70%,rgba(122,160,201,0.04),transparent 70%);}
+  .login-box{width:380px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 36px;}
+  .login-logo{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;color:var(--gold);letter-spacing:.06em;text-align:center;}
+  .login-sub{font-size:10px;color:var(--text-d);letter-spacing:.18em;text-transform:uppercase;text-align:center;margin-top:4px;margin-bottom:32px;}
+  .login-label{font-size:11px;color:var(--text-d);margin-bottom:6px;display:block;}
+  .login-input{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border .15s;}
+  .login-input:focus{border-color:var(--gold-b);}
+  .login-field{margin-bottom:16px;}
+  .login-btn{width:100%;padding:11px;background:var(--gold-d);border:1px solid var(--gold-b);border-radius:var(--r);color:var(--gold);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;margin-top:8px;}
+  .login-btn:hover{background:rgba(201,168,76,.2);}
+  .login-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .login-error{font-size:12px;color:var(--hot);margin-top:10px;text-align:center;}
+  .login-divider{width:40px;height:1px;background:var(--gold-b);margin:0 auto 24px;}
+
+  /* CRM LAYOUT */
+  .crm{display:flex;height:100vh;overflow:hidden;background:var(--bg);
+    background-image:radial-gradient(1000px 500px at 10% -5%,rgba(201,168,76,0.04),transparent 70%),
+    radial-gradient(800px 400px at 95% 5%,rgba(122,160,201,0.03),transparent 70%);}
+  .sidebar{width:224px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+  .logo{padding:22px 18px 18px;border-bottom:1px solid var(--border);}
+  .logo-name{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;color:var(--gold);letter-spacing:.06em;line-height:1;}
+  .logo-sub{font-size:10px;color:var(--text-d);letter-spacing:.18em;text-transform:uppercase;margin-top:4px;}
+  .nav{padding:10px 0;flex:1;}
+  .nav-item{display:flex;align-items:center;gap:9px;padding:9px 18px;font-size:13px;color:var(--text-d);cursor:pointer;transition:all .15s;border-left:2px solid transparent;}
+  .nav-item:hover{color:var(--text-m);background:rgba(255,255,255,.03);}
+  .nav-item.active{color:var(--gold);border-left-color:var(--gold);background:var(--gold-d);}
+  .nav-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  .hbadge{margin:0 12px 10px;padding:10px 12px;background:var(--gold-d);border:1px solid var(--gold-b);border-radius:var(--r2);display:flex;align-items:center;gap:8px;}
+  .hpulse{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+  .htext{font-size:11px;color:var(--gold);font-weight:500;line-height:1.3;}
+  .hsub{font-size:10px;color:var(--gold);opacity:.6;}
+  .sbox{margin:0 12px 10px;padding:10px 12px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);}
+  .sr{display:flex;justify-content:space-between;align-items:center;padding:3px 0;}
+  .sl{font-size:11px;color:var(--text-d);}
+  .sv{font-size:12px;font-weight:500;color:var(--text-m);}
+  .logout-btn{margin:0 12px 16px;padding:8px 12px;background:none;border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text-d);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;text-align:left;display:flex;align-items:center;gap:7px;}
+  .logout-btn:hover{border-color:var(--border2);color:var(--text-m);}
+
+  /* MAIN */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+  .tbtitle{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:500;color:var(--text);letter-spacing:.04em;}
+  .tbr{display:flex;align-items:center;gap:12px;}
+  .sbox2{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:7px 12px;}
+  .sbox2 input{background:none;border:none;outline:none;color:var(--text);font-size:12px;width:180px;font-family:'DM Sans',sans-serif;}
+  .sbox2 input::placeholder{color:var(--text-d);}
+  .uchip{display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--s2);border:1px solid var(--border);border-radius:20px;}
+  .uav{width:24px;height:24px;border-radius:50%;background:var(--gold-d);border:1px solid var(--gold-b);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);font-weight:600;}
+  .uname{font-size:11px;color:var(--text-m);}
+  .role-badge{font-size:9px;padding:2px 7px;border-radius:20px;background:var(--gold-d);border:1px solid var(--gold-b);color:var(--gold);font-weight:500;}
+
+  /* KPIs */
+  .kpis{display:flex;gap:12px;padding:16px 24px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .kpi{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 16px;}
+  .kpi.hi{border-color:var(--gold-b);background:var(--gold-d);}
+  .klabel{font-size:10px;color:var(--text-d);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;}
+  .kval{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;color:var(--text);line-height:1;}
+  .kpi.hi .kval{color:var(--gold-l);}
+  .kdelta{font-size:11px;color:var(--green);margin-top:4px;}
+
+  /* FILTERS */
+  .filters{display:flex;align-items:center;gap:8px;padding:10px 24px;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
+  .fl{font-size:11px;color:var(--text-d);margin-right:2px;white-space:nowrap;}
+  .fb{padding:4px 12px;border-radius:20px;border:1px solid var(--border);font-size:11px;color:var(--text-d);cursor:pointer;background:none;transition:all .15s;white-space:nowrap;font-family:'DM Sans',sans-serif;}
+  .fb:hover{border-color:var(--border2);color:var(--text-m);}
+  .fb.a{background:var(--gold-d);border-color:var(--gold-b);color:var(--gold);}
+  .fdiv{width:1px;height:16px;background:var(--border2);flex-shrink:0;}
+  .tb{padding:4px 10px;border-radius:20px;border:1px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--text-d);font-family:'DM Sans',sans-serif;}
+  .tb.ha{background:rgba(217,91,62,.1);border-color:rgba(217,91,62,.4);color:var(--hot);}
+  .tb.wa{background:rgba(212,160,76,.1);border-color:rgba(212,160,76,.4);color:var(--warm);}
+  .tb.ca{background:rgba(107,143,168,.1);border-color:rgba(107,143,168,.4);color:var(--cold);}
+
+  /* BOARD */
+  .board{flex:1;display:flex;overflow:hidden;}
+  .kanban{flex:1;overflow-x:auto;padding:16px 24px;display:flex;gap:14px;}
+  .col{width:240px;flex-shrink:0;display:flex;flex-direction:column;}
+  .ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+  .ct{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;}
+  .cc{font-size:10px;color:var(--text-d);background:var(--s2);border:1px solid var(--border);border-radius:20px;padding:2px 7px;}
+  .cline{height:2px;border-radius:2px;margin-bottom:8px;}
+  .clist{display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;padding-bottom:8px;}
+
+  /* LEAD CARD */
+  .lcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px;cursor:pointer;transition:all .18s;position:relative;}
+  .lcard:hover{background:var(--card-h);border-color:var(--border2);transform:translateY(-1px);}
+  .lcard.sel{border-color:var(--gold-b);background:var(--card-h);}
+  .lcard.sel::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--gold);border-radius:var(--r2) 0 0 var(--r2);}
+  .ctop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+  .lname{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:500;color:var(--text);line-height:1.2;flex:1;margin-right:8px;}
+  .ttag{display:flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;white-space:nowrap;font-weight:500;}
+  .th{background:var(--hot-bg);color:var(--hot);}
+  .tw{background:var(--warm-bg);color:var(--warm);}
+  .tc{background:var(--cold-bg);color:var(--cold);}
+  .cmeta{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  .mrow{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-d);}
+  .cbot{display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:8px;border-top:1px solid var(--border);}
+  .btag{font-size:11px;color:var(--gold);background:var(--gold-d);padding:2px 8px;border-radius:20px;}
+  .vav{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;}
+  .novav{width:22px;height:22px;border-radius:50%;border:1.5px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-d);}
+  .ctime{font-size:10px;color:var(--text-d);}
+  .empty-col{text-align:center;padding:20px 0;color:var(--text-d);font-size:11px;}
+
+  /* DRAWER */
+  .drawer{width:380px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transition:width .25s;overflow:hidden;}
+  .drawer.closed{width:0;border-left:none;}
+  .dh{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;}
+  .dname{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:500;color:var(--text);line-height:1.2;}
+  .did{font-size:10px;color:var(--text-d);margin-top:3px;}
+  .xbtn{background:none;border:none;color:var(--text-d);font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px;}
+  .xbtn:hover{background:var(--card);color:var(--text);}
+  .dbody{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:16px;}
+  .stitle{font-size:10px;color:var(--text-d);text-transform:uppercase;letter-spacing:.14em;margin-bottom:8px;font-weight:500;}
+  .igrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .ifield{background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;}
+  .ifield.full{grid-column:1/-1;}
+  .ilabel{font-size:10px;color:var(--text-d);margin-bottom:3px;}
+  .ivalue{font-size:12px;color:var(--text-m);font-weight:500;}
+  .ivalue.hi{color:var(--gold);}
+
+  /* Editable field */
+  .iselect{width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:var(--r);padding:5px 8px;color:var(--text-m);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;}
+  .iselect:focus{border-color:var(--gold-b);}
+
+  .sdrbox{background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 13px;}
+  .sdrh{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .sdrdot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+  .sdrl{font-size:11px;color:var(--green);font-weight:500;}
+  .sdrt{font-size:12px;color:var(--text-m);line-height:1.6;}
+  .aibox{background:var(--gold-d);border:1px solid var(--gold-b);border-radius:var(--r2);padding:12px 13px;}
+  .aih{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .ail{font-size:11px;color:var(--gold);font-weight:500;}
+  .ait{font-size:12px;color:var(--gold-l);line-height:1.6;opacity:.9;}
+  .aiacts{display:flex;gap:8px;margin-top:10px;}
+  .aibtn{padding:5px 12px;border-radius:var(--r);border:1px solid var(--gold-b);font-size:11px;color:var(--gold);cursor:pointer;background:none;font-family:'DM Sans',sans-serif;}
+  .aibtn:hover{background:var(--gold-d);}
+
+  /* Add followup */
+  .add-fu{display:flex;gap:8px;margin-top:8px;}
+  .fu-input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;}
+  .fu-input:focus{border-color:var(--gold-b);}
+  .fu-btn{padding:7px 12px;border-radius:var(--r);border:1px solid var(--gold-b);font-size:11px;color:var(--gold);cursor:pointer;background:var(--gold-d);font-family:'DM Sans',sans-serif;white-space:nowrap;}
+
+  .tl{display:flex;flex-direction:column;gap:10px;}
+  .tli{display:flex;gap:10px;align-items:flex-start;}
+  .tlic{width:26px;height:26px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+  .tlic.sdr{background:rgba(106,171,122,.12);border-color:rgba(106,171,122,.3);}
+  .tlic.vendedor{background:rgba(122,160,201,.12);border-color:rgba(122,160,201,.3);}
+  .tlic.sistema{background:rgba(201,168,76,.08);border-color:rgba(201,168,76,.25);}
+  .tlb{flex:1;padding-top:2px;}
+  .tla{font-size:12px;color:var(--text-m);line-height:1.4;}
+  .tlm{font-size:10px;color:var(--text-d);margin-top:2px;}
+
+  .dfoot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;}
+  .bact{flex:1;padding:8px 12px;border-radius:var(--r);border:1px solid var(--border);font-size:12px;color:var(--text-m);cursor:pointer;background:none;font-family:'DM Sans',sans-serif;text-align:center;}
+  .bact:hover{border-color:var(--border2);color:var(--text);}
+  .badv{flex:2;padding:8px 12px;border-radius:var(--r);border:1px solid var(--gold-b);font-size:12px;color:var(--gold);cursor:pointer;background:var(--gold-d);font-weight:500;font-family:'DM Sans',sans-serif;}
+  .badv:hover{background:rgba(201,168,76,.18);}
+
+  .dempty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-d);}
+  .demi{font-family:'Cormorant Garamond',serif;font-size:36px;opacity:.3;}
+  .demt{font-size:12px;text-align:center;line-height:1.6;}
+  .loading{display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text-d);font-size:14px;background:var(--bg);}
+`;
+
+const tempConfig = {
+  hot:  { label:"🔥 Quente", cls:"th" },
+  warm: { label:"🌤 Morno",  cls:"tw" },
+  cold: { label:"❄️ Frio",   cls:"tc" },
+};
+
+/* ── Login Screen ─────────────────────────────────────────── */
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError("E-mail ou senha incorretos.");
+    setLoading(false);
+  };
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="login-wrap">
+        <div className="login-box">
+          <div className="login-logo">Le Blanc</div>
+          <div className="login-sub">Móveis Planejados · CRM</div>
+          <div className="login-divider" />
+          <div className="login-field">
+            <label className="login-label">E-mail</label>
+            <input className="login-input" type="email" placeholder="seu@leblancinteriores.com"
+              value={email} onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          </div>
+          <div className="login-field">
+            <label className="login-label">Senha</label>
+            <input className="login-input" type="password" placeholder="••••••••"
+              value={password} onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          </div>
+          <button className="login-btn" onClick={handleLogin} disabled={loading}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+          {error && <div className="login-error">{error}</div>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Vendor Avatar ────────────────────────────────────────── */
+function VendorAvatar({ name }) {
+  if (!name) return <div className="novav" title="Sem vendedor">?</div>;
+  const v = VENDOR_MAP[name] || { color: "#888", initials: name.slice(0,2).toUpperCase() };
+  return <div className="vav" title={name} style={{ background: v.color+"22", border:`1px solid ${v.color}55`, color: v.color }}>{v.initials}</div>;
+}
+
+/* ── Lead Card ────────────────────────────────────────────── */
+function LeadCard({ lead, selected, onClick }) {
+  const tc = tempConfig[lead.temperature] || tempConfig.cold;
+  const ts = new Date(lead.updated_at);
+  const diff = Math.floor((Date.now() - ts) / 60000);
+  const ago = diff < 60 ? `há ${diff} min` : diff < 1440 ? `há ${Math.floor(diff/60)}h` : `há ${Math.floor(diff/1440)} dias`;
+  return (
+    <div className={`lcard${selected?" sel":""}`} onClick={onClick}>
+      <div className="ctop">
+        <div className="lname">{lead.name}</div>
+        <div className={`ttag ${tc.cls}`}>{tc.label}</div>
+      </div>
+      <div className="cmeta">
+        <div className="mrow"><span>📍</span><span>{lead.city}</span></div>
+        <div className="mrow"><span>🛋</span><span>{lead.product}</span></div>
+      </div>
+      <div className="cbot">
+        <div className="btag">{lead.budget || "—"}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span className="ctime">{ago}</span>
+          <VendorAvatar name={lead.vendor} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Drawer ───────────────────────────────────────────────── */
+function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
+  const [newNote, setNewNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  if (!lead) return (
+    <div className="dempty">
+      <div className="demi">◈</div>
+      <div className="demt">Selecione um lead<br/>para ver os detalhes</div>
+    </div>
+  );
+
+  const tc = tempConfig[lead.temperature] || tempConfig.cold;
+  const next = stageNext(lead.stage);
+  const isGerente = user?.role === "gerente";
+
+  const updateField = async (field, value) => {
+    const { error } = await supabase.schema("leblanc").from("leads")
+      .update({ [field]: value, updated_at: new Date().toISOString() })
+      .eq("id", lead.id);
+    if (!error) onUpdate({ ...lead, [field]: value });
+  };
+
+  const addFollowup = async () => {
+    if (!newNote.trim()) return;
+    setSaving(true);
+    const { error } = await supabase.schema("leblanc").from("followups").insert({
+      lead_id: lead.id, tipo: "vendedor", acao: newNote.trim(),
+      icone: "💬", tempo: new Date().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }),
+    });
+    if (!error) {
+      setNewNote("");
+      onUpdate({ ...lead, followups: [...(lead.followups||[]), { tipo:"vendedor", acao:newNote.trim(), icone:"💬", tempo:"agora" }] });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <>
+      <div className="dh">
+        <div>
+          <div className="dname">{lead.name}</div>
+          <div className="did">{lead.id} · <span className={`ttag ${tc.cls}`} style={{display:"inline-flex",padding:"1px 7px",borderRadius:20,fontSize:10}}>{tc.label}</span></div>
+        </div>
+        <button className="xbtn" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="dbody">
+        {/* Ficha */}
+        <div>
+          <div className="stitle">Ficha do cliente</div>
+          <div className="igrid">
+            <div className="ifield"><div className="ilabel">Telefone</div><div className="ivalue">{lead.phone||"—"}</div></div>
+            <div className="ifield"><div className="ilabel">Região</div><div className="ivalue">{lead.region||"—"}</div></div>
+            <div className="ifield full"><div className="ilabel">Cidade</div><div className="ivalue">{lead.city||"—"}</div></div>
+            <div className="ifield full"><div className="ilabel">Produto</div><div className="ivalue">{lead.product||"—"}</div></div>
+            <div className="ifield"><div className="ilabel">Orçamento</div><div className="ivalue hi">{lead.budget||"—"}</div></div>
+            <div className="ifield">
+              <div className="ilabel">Temperatura</div>
+              <select className="iselect" value={lead.temperature||"cold"} onChange={e=>updateField("temperature",e.target.value)}>
+                <option value="hot">🔥 Quente</option>
+                <option value="warm">🌤 Morno</option>
+                <option value="cold">❄️ Frio</option>
+              </select>
+            </div>
+            {isGerente && (
+              <div className="ifield full">
+                <div className="ilabel">Vendedor atribuído</div>
+                <select className="iselect" value={lead.vendor||""} onChange={e=>updateField("vendor",e.target.value)}>
+                  <option value="">— Não atribuído</option>
+                  {Object.keys(VENDOR_MAP).map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* SDR Summary */}
+        {lead.sdr_summary && (
+          <div>
+            <div className="stitle">Resumo — SDR Helena</div>
+            <div className="sdrbox">
+              <div className="sdrh"><div className="sdrdot"/><div className="sdrl">Gerado pela IA · Helena</div></div>
+              <div className="sdrt">{lead.sdr_summary}</div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Next Step */}
+        {lead.ai_next_step && (
+          <div>
+            <div className="stitle">Próximo passo recomendado</div>
+            <div className="aibox">
+              <div className="aih"><span>✦</span><span className="ail">Sugestão da IA</span></div>
+              <div className="ait">{lead.ai_next_step}</div>
+              <div className="aiacts">
+                <button className="aibtn">📅 Agendar</button>
+                <button className="aibtn">💬 WhatsApp</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Follow-ups */}
+        <div>
+          <div className="stitle">Histórico de interações</div>
+          <div className="tl">
+            {(lead.followups||[]).map((f,i) => (
+              <div className="tli" key={i}>
+                <div className={`tlic ${f.tipo||"sistema"}`}>{f.icone||"📝"}</div>
+                <div className="tlb">
+                  <div className="tla">{f.acao}</div>
+                  <div className="tlm">{{sdr:"SDR Helena",vendedor:lead.vendor||"Vendedor",sistema:"Sistema"}[f.tipo]||"Sistema"} · {f.tempo}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="add-fu" style={{marginTop:12}}>
+            <input className="fu-input" placeholder="Adicionar anotação..." value={newNote} onChange={e=>setNewNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addFollowup()} />
+            <button className="fu-btn" onClick={addFollowup} disabled={saving}>{saving?"...":"+ Salvar"}</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="dfoot">
+        <button className="bact">📞 Ligar</button>
+        <button className="bact">📋 Proposta</button>
+        {next && <button className="badv" onClick={()=>onAdvance(lead.id, next.id)}>→ {next.label}</button>}
+      </div>
+    </>
+  );
+}
+
+/* ── App Principal ────────────────────────────────────────── */
+export default function LeBlancCRM() {
+  const [session, setSession]   = useState(null);
+  const [user, setUser]         = useState(null);
+  const [leads, setLeads]       = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [fv, setFv]             = useState("all");
+  const [fr, setFr]             = useState("all");
+  const [ft, setFt]             = useState("all");
+
+  // Auth listener
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load user profile
+  useEffect(() => {
+    if (!session) { setLoading(false); return; }
+    const loadUser = async () => {
+      const { data } = await supabase.schema("leblanc").from("crm_users").select("*").eq("id", session.user.id).single();
+      setUser(data);
+    };
+    loadUser();
+  }, [session]);
+
+  // Load leads
+  useEffect(() => {
+    if (!session || !user) return;
+    const loadLeads = async () => {
+      setLoading(true);
+      let q = supabase.schema("leblanc").from("leads").select("*, followups(*)").order("updated_at", { ascending: false });
+      if (user.role === "vendedor") q = q.eq("vendor", user.vendor_name);
+      const { data } = await q;
+      setLeads(data || []);
+      setLoading(false);
+    };
+    loadLeads();
+  }, [session, user]);
+
+  const filtered = useMemo(() => leads.filter(l => {
+    if (fv !== "all" && l.vendor !== fv) return false;
+    if (fr !== "all" && l.region !== fr) return false;
+    if (ft !== "all" && l.temperature !== ft) return false;
+    if (search && !l.name?.toLowerCase().includes(search.toLowerCase()) &&
+        !l.product?.toLowerCase().includes(search.toLowerCase()) &&
+        !l.city?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }), [leads, fv, fr, ft, search]);
+
+  const kpis = useMemo(() => ({
+    total: leads.length,
+    quentes: leads.filter(l => l.temperature === "hot").length,
+    pipeline: leads.filter(l => !["fechado","novo"].includes(l.stage)).length,
+    fechados: leads.filter(l => l.stage === "fechado").length,
+  }), [leads]);
+
+  const handleUpdate = (updated) => {
+    setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+    setSelected(updated);
+  };
+
+  const handleAdvance = async (id, nextStage) => {
+    await supabase.schema("leblanc").from("leads").update({ stage: nextStage, updated_at: new Date().toISOString() }).eq("id", id);
+    const updated = { ...selected, stage: nextStage };
+    handleUpdate(updated);
+  };
+
+  const handleLogout = () => supabase.auth.signOut();
+
+  if (!session) return <LoginScreen onLogin={() => {}} />;
+  if (loading) return <><style>{CSS}</style><div className="loading">Carregando leads...</div></>;
+
+  const isGerente = user?.role === "gerente";
+  const VENDORS = Object.keys(VENDOR_MAP);
+  const initials = user?.name?.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase() || "??";
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="crm">
+        {/* SIDEBAR */}
+        <div className="sidebar">
+          <div className="logo">
+            <div className="logo-name">Le Blanc</div>
+            <div className="logo-sub">Móveis Planejados · CRM</div>
+          </div>
+          <nav className="nav">
+            {[["pipeline","Pipeline","#c9a84c"],["leads","Todos os Leads","#7aa0c9"],["followups","Follow-ups","#d4a04c"],["reports","Relatórios","#6aab7a"]].map(([id,label,color])=>(
+              <div key={id} className={`nav-item${id==="pipeline"?" active":""}`}>
+                <div className="nav-dot" style={{background:id==="pipeline"?"var(--gold)":color+"80"}}/>{label}
+              </div>
+            ))}
+          </nav>
+          <div className="hbadge">
+            <div className="hpulse"/>
+            <div><div className="htext">Helena ativa</div><div className="hsub">SDR online</div></div>
+          </div>
+          <div className="sbox">
+            <div className="sr"><span className="sl">Total leads</span><span className="sv">{leads.length}</span></div>
+            <div className="sr"><span className="sl">Conversão</span><span className="sv">{leads.length ? Math.round((kpis.fechados/leads.length)*100) : 0}%</span></div>
+            <div className="sr"><span className="sl">Quentes</span><span className="sv">{kpis.quentes}</span></div>
+          </div>
+          <button className="logout-btn" onClick={handleLogout}><span>⎋</span> Sair</button>
+        </div>
+
+        {/* MAIN */}
+        <div className="main">
+          <div className="topbar">
+            <div className="tbtitle">Pipeline de Vendas</div>
+            <div className="tbr">
+              <div className="sbox2">
+                <span style={{color:"var(--text-d)",fontSize:13}}>⌕</span>
+                <input placeholder="Buscar lead, produto, cidade..." value={search} onChange={e=>setSearch(e.target.value)}/>
+              </div>
+              <div className="uchip">
+                <div className="uav">{initials}</div>
+                <div className="uname">{user?.name||"—"}</div>
+                <div className="role-badge">{isGerente?"Gerente":"Vendedor"}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="kpis">
+            <div className="kpi"><div className="klabel">Total de leads</div><div className="kval">{kpis.total}</div><div className="kdelta">no CRM</div></div>
+            <div className="kpi hi"><div className="klabel">🔥 Quentes</div><div className="kval">{kpis.quentes}</div><div className="kdelta" style={{color:"var(--hot)"}}>alta prioridade</div></div>
+            <div className="kpi"><div className="klabel">Em negociação</div><div className="kval">{kpis.pipeline}</div><div className="kdelta">no funil</div></div>
+            <div className="kpi"><div className="klabel">Fechados</div><div className="kval">{kpis.fechados}</div><div className="kdelta" style={{color:"var(--green)"}}>✓ convertidos</div></div>
+          </div>
+
+          <div className="filters">
+            {isGerente && (<>
+              <span className="fl">Vendedor:</span>
+              <button className={`fb${fv==="all"?" a":""}`} onClick={()=>setFv("all")}>Todos</button>
+              {VENDORS.map(v=><button key={v} className={`fb${fv===v?" a":""}`} onClick={()=>setFv(fv===v?"all":v)}>{v}</button>)}
+              <div className="fdiv"/>
+            </>)}
+            <span className="fl">Região:</span>
+            <button className={`fb${fr==="all"?" a":""}`} onClick={()=>setFr("all")}>Todas</button>
+            {REGIONS.map(r=><button key={r} className={`fb${fr===r?" a":""}`} onClick={()=>setFr(fr===r?"all":r)}>{r}</button>)}
+            <div className="fdiv"/>
+            <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
+            <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
+            <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
+          </div>
+
+          <div className="board">
+            <div className="kanban">
+              {STAGES.map(stage => {
+                const cl = filtered.filter(l => l.stage === stage.id);
+                return (
+                  <div className="col" key={stage.id}>
+                    <div className="ch">
+                      <div className="ct" style={{color:stage.color}}>{stage.label}</div>
+                      <div className="cc">{cl.length}</div>
+                    </div>
+                    <div className="cline" style={{background:stage.color+"60"}}/>
+                    <div className="clist">
+                      {cl.length===0 ? <div className="empty-col">sem leads</div> :
+                        cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id} onClick={()=>setSelected(selected?.id===lead.id?null:lead)}/>)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className={`drawer${!selected?" closed":""}`}>
+              <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
