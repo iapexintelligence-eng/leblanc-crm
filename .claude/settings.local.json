@@ -11,7 +11,9 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git config *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(ls -la \"/mnt/c/Users/User/Downloads/leblanc-crm-bw.jsx\")",
+      "Bash(wslpath -w \"C:/Users/User/Downloads/leblanc-crm-bw.jsx\")"
     ]
   }
 }
