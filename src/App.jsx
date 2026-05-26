@@ -25,6 +25,7 @@ const VENDOR_MAP = {
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
+const PIPELINE_STAGES = ["novo","qualificado","atendimento","visita","proposta"];
 const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
 
 const CSS = `
@@ -223,6 +224,43 @@ const CSS = `
   .demi{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:300;opacity:.2;letter-spacing:.1em;}
   .demt{font-size:11px;text-align:center;line-height:1.7;letter-spacing:.06em;text-transform:uppercase;}
   .loading{display:flex;align-items:center;justify-content:center;height:100vh;color:var(--mid);font-size:12px;background:var(--black);letter-spacing:.12em;text-transform:uppercase;}
+
+  /* REPORTS */
+  .reports-wrap{flex:1;overflow-y:auto;padding:24px;background:var(--bg);}
+  .reports-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .report-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:20px;}
+  .report-card.full{grid-column:1/-1;}
+  .report-title{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--light);margin-bottom:16px;}
+  .vendor-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .vendor-row:last-child{border-bottom:none;}
+  .vendor-av{width:32px;height:32px;border-radius:50%;background:var(--black);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0;}
+  .vendor-name{font-size:13px;color:var(--dark);font-weight:500;flex:1;}
+  .vendor-stats{display:flex;gap:16px;}
+  .vstat{text-align:right;}
+  .vstat-val{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:400;color:var(--black);line-height:1;}
+  .vstat-label{font-size:9px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;}
+  .vstat-val.green{color:var(--green);}
+  .vstat-val.red{color:var(--red);}
+  .bar-wrap{flex:1;height:6px;background:var(--s2);border-radius:3px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--black);border-radius:3px;transition:width .4s;}
+  .bar-fill.green{background:var(--green);}
+  .pie-row{display:flex;align-items:center;justify-content:space-around;padding:8px 0;}
+  .pie-item{text-align:center;}
+  .pie-val{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;line-height:1;}
+  .pie-label{font-size:9px;color:var(--light);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;}
+  .pie-val.black{color:var(--black);}
+  .pie-val.green{color:var(--green);}
+  .pie-val.red{color:var(--red);}
+  .pie-val.amber{color:var(--amber);}
+  .evolution-bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:12px;}
+  .evo-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .evo-bar{width:100%;background:var(--black);border-radius:2px 2px 0 0;transition:height .4s;min-height:2px;}
+  .evo-label{font-size:9px;color:var(--faint);letter-spacing:.04em;}
+  .evo-val{font-size:10px;color:var(--dark);font-weight:500;}
+  .region-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .region-row:last-child{border-bottom:none;}
+  .region-name{font-size:12px;color:var(--dark);flex:1;}
+  .region-count{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--black);}
 `;
 
 function VendorAvatar({ name }) {
@@ -376,6 +414,157 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   );
 }
 
+function Reports({ leads }) {
+  const VENDORS = Object.keys(VENDOR_MAP);
+
+  const vendorStats = useMemo(() => VENDORS.map(v => {
+    const vLeads = leads.filter(l => l.vendor === v);
+    const fechados = vLeads.filter(l => l.stage === "fechado").length;
+    const perdidos = vLeads.filter(l => l.stage === "perdido").length;
+    const ativos = vLeads.filter(l => PIPELINE_STAGES.includes(l.stage)).length;
+    const taxa = vLeads.length ? Math.round((fechados / vLeads.length) * 100) : 0;
+    return { name: v, total: vLeads.length, fechados, perdidos, ativos, taxa };
+  }).sort((a,b) => b.total - a.total), [leads]);
+
+  const maxLeads = Math.max(...vendorStats.map(v => v.total), 1);
+
+  const totalFechados = leads.filter(l => l.stage === "fechado").length;
+  const totalPerdidos = leads.filter(l => l.stage === "perdido").length;
+  const totalSemContato = leads.filter(l => l.stage === "sem_contato").length;
+  const totalAtivos = leads.filter(l => PIPELINE_STAGES.includes(l.stage)).length;
+
+  const regionStats = useMemo(() => {
+    const map = {};
+    leads.forEach(l => { if(l.region) map[l.region] = (map[l.region]||0) + 1; });
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  }, [leads]);
+
+  const evolution = useMemo(() => {
+    const months = [];
+    for (let i = 7; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const label = d.toLocaleString('pt-BR', { month:'short' });
+      const count = leads.filter(l => l.updated_at?.startsWith(key)).length;
+      months.push({ label, count, key });
+    }
+    return months;
+  }, [leads]);
+
+  const maxEvo = Math.max(...evolution.map(e => e.count), 1);
+
+  return (
+    <div className="reports-wrap">
+      <div className="reports-grid">
+        <div className="report-card full">
+          <div className="report-title">Leads por vendedor — taxa de conversão</div>
+          {vendorStats.map(v => (
+            <div className="vendor-row" key={v.name}>
+              <div className="vendor-av">{VENDOR_MAP[v.name]?.initials||v.name.slice(0,2)}</div>
+              <div style={{flex:1}}>
+                <div className="vendor-name">{v.name}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                  <div className="bar-wrap">
+                    <div className="bar-fill" style={{width:`${(v.total/maxLeads)*100}%`}}/>
+                  </div>
+                  <span style={{fontSize:10,color:"var(--light)",minWidth:30}}>{v.total} leads</span>
+                </div>
+              </div>
+              <div className="vendor-stats">
+                <div className="vstat">
+                  <div className={`vstat-val${v.fechados>0?" green":""}`}>{v.fechados}</div>
+                  <div className="vstat-label">fechados</div>
+                </div>
+                <div className="vstat">
+                  <div className={`vstat-val${v.perdidos>0?" red":""}`}>{v.perdidos}</div>
+                  <div className="vstat-label">perdidos</div>
+                </div>
+                <div className="vstat">
+                  <div className="vstat-val" style={{color:"var(--black)",fontFamily:"'Cormorant Garamond',serif",fontSize:20}}>{v.taxa}%</div>
+                  <div className="vstat-label">conversão</div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {vendorStats.every(v=>v.total===0) && (
+            <div style={{textAlign:"center",padding:"20px 0",color:"var(--faint)",fontSize:11}}>Nenhum lead atribuído ainda</div>
+          )}
+        </div>
+
+        <div className="report-card">
+          <div className="report-title">Status geral dos leads</div>
+          <div className="pie-row">
+            <div className="pie-item">
+              <div className="pie-val black">{totalAtivos}</div>
+              <div className="pie-label">No funil</div>
+            </div>
+            <div className="pie-item">
+              <div className="pie-val green">{totalFechados}</div>
+              <div className="pie-label">Fechados</div>
+            </div>
+            <div className="pie-item">
+              <div className="pie-val amber">{totalSemContato}</div>
+              <div className="pie-label">Sem contato</div>
+            </div>
+            <div className="pie-item">
+              <div className="pie-val red">{totalPerdidos}</div>
+              <div className="pie-label">Perdidos</div>
+            </div>
+          </div>
+          {leads.length > 0 && (
+            <div style={{marginTop:16}}>
+              <div style={{display:"flex",height:8,borderRadius:4,overflow:"hidden",gap:2}}>
+                <div style={{flex:totalAtivos,background:"var(--black)",minWidth:totalAtivos?2:0}}/>
+                <div style={{flex:totalFechados,background:"var(--green)",minWidth:totalFechados?2:0}}/>
+                <div style={{flex:totalSemContato,background:"var(--amber)",minWidth:totalSemContato?2:0}}/>
+                <div style={{flex:totalPerdidos,background:"var(--red)",minWidth:totalPerdidos?2:0}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                <span style={{fontSize:9,color:"var(--faint)"}}>Total: {leads.length} leads</span>
+                <span style={{fontSize:9,color:"var(--green)"}}>
+                  {leads.length ? Math.round((totalFechados/leads.length)*100) : 0}% conversão
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="report-card">
+          <div className="report-title">Leads por região</div>
+          {regionStats.length === 0 && (
+            <div style={{textAlign:"center",padding:"20px 0",color:"var(--faint)",fontSize:11}}>Sem dados de região</div>
+          )}
+          {regionStats.map(([region, count]) => (
+            <div className="region-row" key={region}>
+              <div className="region-name">{region}</div>
+              <div style={{flex:2,margin:"0 12px"}}>
+                <div className="bar-wrap">
+                  <div className="bar-fill green" style={{width:`${(count/leads.length)*100}%`}}/>
+                </div>
+              </div>
+              <div className="region-count">{count}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="report-card full">
+          <div className="report-title">Evolução de leads — últimos 8 meses</div>
+          <div className="evolution-bars">
+            {evolution.map(e => (
+              <div className="evo-bar-wrap" key={e.key}>
+                <div className="evo-val">{e.count||""}</div>
+                <div className="evo-bar" style={{height:`${Math.max((e.count/maxEvo)*80,e.count?4:0)}px`}}/>
+                <div className="evo-label">{e.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -421,6 +610,7 @@ export default function LeBlancCRM() {
   const [fv, setFv] = useState("all");
   const [fr, setFr] = useState("all");
   const [ft, setFt] = useState("all");
+  const [activePage, setActivePage] = useState("pipeline");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -494,8 +684,8 @@ export default function LeBlancCRM() {
             <div className="logo-sub">Pipeline de Vendas</div>
           </div>
           <nav className="nav">
-            {[["pipeline","Pipeline"],["leads","Todos os Leads"],["followups","Acompanhamento"],["reports","Relatórios"]].map(([id,label])=>(
-              <div key={id} className={`nav-item${id==="pipeline"?" active":""}`}>
+            {[["pipeline","Pipeline"],["reports","Relatórios"]].map(([id,label])=>(
+              <div key={id} className={`nav-item${activePage===id?" active":""}`} onClick={()=>{ setActivePage(id); setSelected(null); }}>
                 <div className="nav-dot"/>{label}
               </div>
             ))}
@@ -514,7 +704,7 @@ export default function LeBlancCRM() {
 
         <div className="main">
           <div className="topbar">
-            <div className="tbtitle">Pipeline de Vendas</div>
+            <div className="tbtitle">{activePage==="reports"?"Relatórios":"Pipeline de Vendas"}</div>
             <div className="tbr">
               <div className="sbox2">
                 <span className="search-icon">⌕</span>
@@ -535,44 +725,50 @@ export default function LeBlancCRM() {
             <div className="kpi"><div className="klabel">Fechados</div><div className="kval">{kpis.fechados}</div><div className="kdelta green">convertidos</div></div>
           </div>
 
-          <div className="filters">
-            {isGerente && (<>
-              <span className="fl">Vendedor</span>
-              <button className={`fb${fv==="all"?" a":""}`} onClick={()=>setFv("all")}>Todos</button>
-              {VENDORS.map(v=><button key={v} className={`fb${fv===v?" a":""}`} onClick={()=>setFv(fv===v?"all":v)}>{v}</button>)}
-              <div className="fdiv"/>
-            </>)}
-            <span className="fl">Região</span>
-            <button className={`fb${fr==="all"?" a":""}`} onClick={()=>setFr("all")}>Todas</button>
-            {REGIONS.map(r=><button key={r} className={`fb${fr===r?" a":""}`} onClick={()=>setFr(fr===r?"all":r)}>{r}</button>)}
-            <div className="fdiv"/>
-            <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
-            <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
-            <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
-          </div>
+          {activePage === "reports" ? (
+            <Reports leads={leads}/>
+          ) : (
+            <>
+              <div className="filters">
+                {isGerente && (<>
+                  <span className="fl">Vendedor</span>
+                  <button className={`fb${fv==="all"?" a":""}`} onClick={()=>setFv("all")}>Todos</button>
+                  {VENDORS.map(v=><button key={v} className={`fb${fv===v?" a":""}`} onClick={()=>setFv(fv===v?"all":v)}>{v}</button>)}
+                  <div className="fdiv"/>
+                </>)}
+                <span className="fl">Região</span>
+                <button className={`fb${fr==="all"?" a":""}`} onClick={()=>setFr("all")}>Todas</button>
+                {REGIONS.map(r=><button key={r} className={`fb${fr===r?" a":""}`} onClick={()=>setFr(fr===r?"all":r)}>{r}</button>)}
+                <div className="fdiv"/>
+                <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
+                <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
+                <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
+              </div>
 
-          <div className="board">
-            <div className="kanban">
-              {STAGES.map(stage=>{
-                const cl = filtered.filter(l=>l.stage===stage.id);
-                return (
-                  <div className="col" key={stage.id}>
-                    <div className="ch">
-                      <div className="ct">{stage.label}</div>
-                      <div className="cc">{cl.length}</div>
-                    </div>
-                    <div className="clist">
-                      {cl.length===0?<div className="empty-col">sem leads</div>:
-                        cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id} onClick={()=>setSelected(selected?.id===lead.id?null:lead)}/>)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className={`drawer${!selected?" closed":""}`}>
-              <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}/>
-            </div>
-          </div>
+              <div className="board">
+                <div className="kanban">
+                  {STAGES.map(stage=>{
+                    const cl = filtered.filter(l=>l.stage===stage.id);
+                    return (
+                      <div className="col" key={stage.id}>
+                        <div className="ch">
+                          <div className="ct">{stage.label}</div>
+                          <div className="cc">{cl.length}</div>
+                        </div>
+                        <div className="clist">
+                          {cl.length===0?<div className="empty-col">sem leads</div>:
+                            cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id} onClick={()=>setSelected(selected?.id===lead.id?null:lead)}/>)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className={`drawer${!selected?" closed":""}`}>
+                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}/>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
