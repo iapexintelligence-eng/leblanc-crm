@@ -12,6 +12,8 @@ const STAGES = [
   { id: "visita",      label: "Visita / Projeto", color: "#4d4d4d" },
   { id: "proposta",    label: "Proposta",         color: "#5d5d5d" },
   { id: "fechado",     label: "Fechado",          color: "#1a1a1a" },
+  { id: "sem_contato", label: "Sem Contato",      color: "#b7791f" },
+  { id: "perdido",     label: "Perdido",          color: "#c0392b" },
 ];
 
 const VENDOR_MAP = {
@@ -461,7 +463,7 @@ export default function LeBlancCRM() {
   const kpis = useMemo(() => ({
     total: leads.length,
     quentes: leads.filter(l => l.temperature === "hot").length,
-    pipeline: leads.filter(l => !["fechado","novo"].includes(l.stage)).length,
+    pipeline: leads.filter(l => l.stage !== "perdido").length,
     fechados: leads.filter(l => l.stage === "fechado").length,
   }), [leads]);
 
