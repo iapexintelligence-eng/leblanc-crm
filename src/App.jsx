@@ -350,7 +350,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vendedor: lead.vendedor,
+          vendedor: lead.vendor,
           telefone: lead.phone?.replace(/\D/g, ''),
           mensagem: msg
         })
@@ -364,7 +364,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   async function adicionarTarefa() {
     if (!novaTarefa.descricao.trim()) return;
     await supabase.schema('vendas_leblanc').from('tarefas').insert({
-      lead_id: lead.id, vendedor: lead.vendedor,
+      lead_id: lead.id, vendedor: lead.vendor,
       descricao: novaTarefa.descricao,
       prazo: novaTarefa.prazo || null,
       tipo: novaTarefa.tipo, status: 'pendente'
@@ -415,13 +415,13 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--border)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
           <div>
-            <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,lineHeight:1.2}}>{lead.nome}</div>
+            <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,lineHeight:1.2}}>{lead.name}</div>
             <div style={{fontSize:11,color:'var(--muted)',marginTop:4,display:'flex',gap:6,alignItems:'center'}}>
               <span>{lead.id}</span>
               <span>·</span>
-              <span className={`temp ${lead.temperatura}`}>{lead.temperatura}</span>
+              <span className={`temp ${lead.temperature}`}>{lead.temperature}</span>
               <span>·</span>
-              <span>{lead.vendedor}</span>
+              <span>{lead.vendor}</span>
             </div>
           </div>
           <button onClick={onClose}
@@ -457,22 +457,22 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             <div style={S.sectionTitle}>FICHA DO CLIENTE</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
               <div style={S.infoBox}><div style={S.infoLabel}>Telefone</div><div style={S.infoVal}>{lead.phone}</div></div>
-              <div style={S.infoBox}><div style={S.infoLabel}>Região</div><div style={S.infoVal}>{lead.regiao||lead.cidade||'—'}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Região</div><div style={S.infoVal}>{lead.region||lead.city||'—'}</div></div>
             </div>
             <div style={{marginBottom:6}}>
-              <div style={S.infoBox}><div style={S.infoLabel}>Produto</div><div style={S.infoVal}>{lead.produto||'—'}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Produto</div><div style={S.infoVal}>{lead.product||'—'}</div></div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:16}}>
-              <div style={S.infoBox}><div style={S.infoLabel}>Orçamento</div><div style={S.infoVal}>{lead.orcamento||'—'}</div></div>
-              <div style={S.infoBox}><div style={S.infoLabel}>Vendedor</div><div style={S.infoVal}>{lead.vendedor||'—'}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Orçamento</div><div style={S.infoVal}>{lead.budget||'—'}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Vendedor</div><div style={S.infoVal}>{lead.vendor||'—'}</div></div>
             </div>
-            {lead.resumo_sdr && (<>
+            {lead.sdr_summary && (<>
               <div style={S.sectionTitle}>RESUMO DA HELENA</div>
-              <div style={{fontSize:12,lineHeight:1.6,background:'var(--bg2)',padding:'10px 12px',borderRadius:6,marginBottom:16}}>{lead.resumo_sdr}</div>
+              <div style={{fontSize:12,lineHeight:1.6,background:'var(--bg2)',padding:'10px 12px',borderRadius:6,marginBottom:16}}>{lead.sdr_summary}</div>
             </>)}
-            {lead.proximo_passo && (<>
+            {lead.ai_next_step && (<>
               <div style={S.sectionTitle}>PRÓXIMO PASSO</div>
-              <div style={{fontSize:12,lineHeight:1.6,background:'#f0f9f4',padding:'10px 12px',borderRadius:6,border:'1px solid #d1f0e0'}}>{lead.proximo_passo}</div>
+              <div style={{fontSize:12,lineHeight:1.6,background:'#f0f9f4',padding:'10px 12px',borderRadius:6,border:'1px solid #d1f0e0'}}>{lead.ai_next_step}</div>
             </>)}
           </div>
         )}
@@ -481,7 +481,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
         {tab==='conversa' && (
           <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
             <div style={{fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',padding:'10px 14px 4px'}}>
-              CONVERSA WHATSAPP — {(lead.vendedor||'').toUpperCase()}
+              CONVERSA WHATSAPP — {(lead.vendor||'').toUpperCase()}
             </div>
             <div ref={convRef} style={{flex:1,overflowY:'auto',padding:'6px 14px',display:'flex',flexDirection:'column',gap:8}}>
               {conversas.length===0 && (
@@ -498,7 +498,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                     color: c.de==='vendedor' ? '#fff' : 'var(--dark)',
                   }}>{c.mensagem}</div>
                   <div style={{fontSize:10,color:'var(--muted)',marginTop:2,padding:'0 4px'}}>
-                    {c.de==='vendedor' ? lead.vendedor : lead.nome} · {new Date(c.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+                    {c.de==='vendedor' ? lead.vendor : lead.name} · {new Date(c.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
                   </div>
                 </div>
               ))}
@@ -509,7 +509,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 placeholder="Escreva uma mensagem..."
                 style={{flex:1,padding:'8px 12px',border:'1px solid var(--border)',borderRadius:20,fontSize:12,outline:'none'}}/>
               <button onClick={enviarMensagem} disabled={enviando}
-                style={{padding:'8px 16px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:20,fontSize:12,cursor:'pointer',opacity:enviando?.6:1}}>
+                style={{padding:'8px 16px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:20,fontSize:12,cursor:'pointer',opacity:enviando ? 0.6 : 1}}>
                 {enviando?'…':'Enviar'}
               </button>
             </div>
@@ -593,9 +593,9 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
           <div>
             <div style={S.sectionTitle}>LINHA DO TEMPO</div>
             {[
-              { icon:'🤖', label:'Helena iniciou atendimento', tempo:lead.criado_em, who:'SDR Helena' },
-              lead.vendedor ? { icon:'✅', label:`Lead repassado para ${lead.vendedor}`, tempo:lead.updated_at, who:'SDR Helena' } : null,
-              lead.stage!=='novo_lead' ? { icon:'💬', label:`Vendedor em ${lead.stage}`, tempo:lead.updated_at, who:lead.vendedor } : null,
+              { icon:'🤖', label:'Helena iniciou atendimento', tempo:lead.created_at, who:'SDR Helena' },
+              lead.vendor ? { icon:'✅', label:`Lead repassado para ${lead.vendor}`, tempo:lead.updated_at, who:'SDR Helena' } : null,
+              lead.stage!=='novo_lead' ? { icon:'💬', label:`Vendedor em ${lead.stage}`, tempo:lead.updated_at, who:lead.vendor } : null,
             ].filter(Boolean).map((h,i)=>(
               <div key={i} style={{display:'flex',gap:12,paddingBottom:18,position:'relative'}}>
                 <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{h.icon}</div>
