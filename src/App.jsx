@@ -270,14 +270,14 @@ function VendorAvatar({ name }) {
   return <div className="vav" title={name}>{v.initials}</div>;
 }
 
-function LeadCard({ lead, selected, onClick }) {
+function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
   const tcls = { hot:"th", warm:"tw", cold:"tc" }[lead.temperature] || "tc";
   const tlabel = { hot:"Quente", warm:"Morno", cold:"Frio" }[lead.temperature] || "Frio";
   const ts = new Date(lead.updated_at);
   const diff = Math.floor((Date.now() - ts) / 60000);
   const ago = diff < 60 ? `${diff}min` : diff < 1440 ? `${Math.floor(diff/60)}h` : `${Math.floor(diff/1440)}d`;
   return (
-    <div className={`lcard${selected?" sel":""}`} onClick={onClick}>
+    <div className={`lcard${selected?" sel":""}`} onClick={onClick} draggable={true} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="ctop">
         <div className="lname">{lead.name}</div>
         <div className={`ttag ${tcls}`}>{tlabel}</div>
@@ -306,16 +306,18 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [enviando, setEnviando] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
   const [notes, setNotes] = useState('');
+  const [helenaChats, setHelenaChats] = useState([]);
   const convRef = useRef(null);
 
   useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
-    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] });
+    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] }); setHelenaChats([]);
     if (tab === 'conversa') loadConversas();
     if (tab === 'tarefas') loadTarefas();
     if (tab === 'arquivos') loadArquivos();
+    if (tab === 'historico') loadHelena();
   }, [lead?.id, tab]);
 
   async function loadConversas() {
@@ -352,6 +354,13 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       })
     );
     setArquivos({ cliente: convArq || [], vendedor: filesWithUrls });
+  }
+
+  async function loadHelena() {
+    const phone = lead.phone?.replace(/\D/g,'');
+    const { data } = await supabase.schema('leblanc').from('sdr_chats')
+      .select('*').eq('session_id', phone).order('id',{ascending:true});
+    setHelenaChats(data||[]);
   }
 
   async function enviarMensagem() {
@@ -443,15 +452,15 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
       {/* Tabs */}
       <div style={{display:'flex',borderBottom:'1px solid var(--border)',padding:'0 8px',overflowX:'auto'}}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+        {TABS.map(tabItem => (
+          <button key={tabItem.id} onClick={() => setTab(tabItem.id)}
             style={{
               padding:'9px 10px',fontSize:11,fontWeight:500,whiteSpace:'nowrap',
               border:'none',background:'none',cursor:'pointer',
-              borderBottom: tab===t.id ? '2px solid var(--dark)' : '2px solid transparent',
-              color: tab===t.id ? 'var(--dark)' : 'var(--muted)',
+              borderBottom: tab===tabItem.id ? '2px solid var(--dark)' : '2px solid transparent',
+              color: tab===tabItem.id ? 'var(--dark)' : 'var(--muted)',
             }}>
-            {t.label}
+            {tabItem.label}
           </button>
         ))}
       </div>
@@ -647,23 +656,30 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
         {/* ── HISTÓRICO ── */}
         {tab==='historico' && (
-          <div>
-            <div style={S.sectionTitle}>LINHA DO TEMPO</div>
-            {[
-              { icon:'🤖', label:'Helena iniciou atendimento', tempo:lead.created_at, who:'SDR Helena' },
-              lead.vendor ? { icon:'✅', label:`Lead repassado para ${lead.vendor}`, tempo:lead.updated_at, who:'SDR Helena' } : null,
-              lead.stage!=='novo_lead' ? { icon:'💬', label:`Vendedor em ${lead.stage}`, tempo:lead.updated_at, who:lead.vendor } : null,
-            ].filter(Boolean).map((h,i)=>(
-              <div key={i} style={{display:'flex',gap:12,paddingBottom:18,position:'relative'}}>
-                <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{h.icon}</div>
-                <div style={{flex:1,paddingTop:4}}>
-                  <div style={{fontSize:13}}>{h.label}</div>
-                  <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>
-                    {h.who} · {h.tempo ? new Date(h.tempo).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}
+          <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+            <div style={{fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',paddingBottom:12}}>
+              CONVERSA COM A HELENA
+            </div>
+            <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+              {helenaChats.length===0 && <div style={{color:'var(--muted)',fontSize:12,textAlign:'center',marginTop:40}}>Nenhuma conversa registrada</div>}
+              {helenaChats.map((c,i)=>{
+                const isAI=c.message?.type==='ai';
+                const content=c.message?.content;
+                if(!content||content==='undefined') return null;
+                return (
+                  <div key={i} style={{display:'flex',flexDirection:'column',alignItems:isAI?'flex-start':'flex-end'}}>
+                    <div style={{maxWidth:'85%',padding:'8px 12px',fontSize:12,lineHeight:1.6,whiteSpace:'pre-wrap',
+                      borderRadius:isAI?'12px 12px 12px 2px':'12px 12px 2px 12px',
+                      background:isAI?'#f0f0f0':'var(--dark)',color:isAI?'var(--dark)':'#fff'}}>
+                      {content}
+                    </div>
+                    <div style={{fontSize:10,color:'var(--muted)',marginTop:2,padding:'0 4px'}}>
+                      {isAI?'🤖 Helena':'👤 Cliente'}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -876,6 +892,7 @@ export default function LeBlancCRM() {
   const [fr, setFr] = useState("all");
   const [ft, setFt] = useState("all");
   const [activePage, setActivePage] = useState("pipeline");
+  const [dragging, setDragging] = useState(null);
   const [showNewLead, setShowNewLead] = useState(false);
   const [newLead, setNewLead] = useState({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
 
@@ -1107,14 +1124,24 @@ export default function LeBlancCRM() {
                   {STAGES.map(stage=>{
                     const cl = filtered.filter(l=>l.stage===stage.id);
                     return (
-                      <div className="col" key={stage.id}>
+                      <div className="col" key={stage.id}
+                        onDragOver={e=>e.preventDefault()}
+                        onDrop={async()=>{
+                          if(!dragging) return;
+                          await supabase.schema('leblanc').from('leads').update({stage:stage.id,updated_at:new Date().toISOString()}).eq('id',dragging);
+                          setLeads(p=>p.map(l=>l.id===dragging?{...l,stage:stage.id}:l));
+                          setDragging(null);
+                        }}>
                         <div className="ch">
                           <div className="ct">{stage.label}</div>
                           <div className="cc">{cl.length}</div>
                         </div>
                         <div className="clist">
                           {cl.length===0?<div className="empty-col">sem leads</div>:
-                            cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id} onClick={()=>setSelected(selected?.id===lead.id?null:lead)}/>)}
+                            cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id}
+                              onClick={()=>setSelected(selected?.id===lead.id?null:lead)}
+                              onDragStart={()=>setDragging(lead.id)}
+                              onDragEnd={()=>setDragging(null)}/>)}
                         </div>
                       </div>
                     );
