@@ -342,7 +342,16 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       .order('criado_em', { ascending: false });
     const { data: storageFiles } = await supabase.storage
       .from('leblanc-arquivos').list(`leads/${lead.id}`);
-    setArquivos({ cliente: convArq || [], vendedor: storageFiles || [] });
+
+    const filesWithUrls = await Promise.all(
+      (storageFiles || []).filter(f => f.name !== '.emptyFolderPlaceholder').map(async (f) => {
+        const { data: urlData } = await supabase.storage
+          .from('leblanc-arquivos')
+          .createSignedUrl(`leads/${lead.id}/${f.name}`, 3600);
+        return { ...f, signedUrl: urlData?.signedUrl };
+      })
+    );
+    setArquivos({ cliente: convArq || [], vendedor: filesWithUrls });
   }
 
   async function enviarMensagem() {
@@ -467,7 +476,24 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:16}}>
               <div style={S.infoBox}><div style={S.infoLabel}>Orçamento</div><div style={S.infoVal}>{lead.budget||'—'}</div></div>
-              <div style={S.infoBox}><div style={S.infoLabel}>Vendedor</div><div style={S.infoVal}>{lead.vendor||'—'}</div></div>
+              <div style={S.infoBox}>
+                <div style={S.infoLabel}>Vendedor</div>
+                <select
+                  value={lead.vendor || ''}
+                  onChange={async (e) => {
+                    const novoVendedor = e.target.value;
+                    await supabase.schema('leblanc').from('leads')
+                      .update({ vendor: novoVendedor, updated_at: new Date().toISOString() })
+                      .eq('id', lead.id);
+                    onUpdate && onUpdate({ ...lead, vendor: novoVendedor });
+                  }}
+                  style={{width:'100%',border:'none',background:'transparent',fontSize:13,fontWeight:500,cursor:'pointer',padding:0}}>
+                  <option value="">Sem vendedor</option>
+                  {['Tayne','Murilo','Nicolle','Bruna','André'].map(v=>(
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             {lead.sdr_summary && (<>
               <div style={S.sectionTitle}>RESUMO DA HELENA</div>
