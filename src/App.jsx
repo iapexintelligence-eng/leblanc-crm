@@ -6,14 +6,15 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STAGES = [
-  { id: "novo",        label: "Novo do SDR",     color: "#1a1a1a" },
-  { id: "qualificado", label: "Qualificado",     color: "#2d2d2d" },
-  { id: "atendimento", label: "Em atendimento",  color: "#3d3d3d" },
-  { id: "visita",      label: "Visita / Projeto", color: "#4d4d4d" },
-  { id: "proposta",    label: "Proposta",         color: "#5d5d5d" },
-  { id: "fechado",     label: "Fechado",          color: "#1a1a1a" },
-  { id: "sem_contato", label: "Sem Contato",      color: "#b7791f" },
-  { id: "perdido",     label: "Perdido",          color: "#c0392b" },
+  { id: "novo",         label: "Novo Lead",              colorClass: "" },
+  { id: "sem_resposta", label: "Sem Resposta",           colorClass: "amber" },
+  { id: "atendimento",  label: "Em Atendimento",         colorClass: "" },
+  { id: "aguardando",   label: "Aguardando Informações", colorClass: "" },
+  { id: "projeto",      label: "Desenvolvendo Projeto",  colorClass: "" },
+  { id: "apresentacao", label: "Apresentação",           colorClass: "" },
+  { id: "negociacao",   label: "Negociação",             colorClass: "" },
+  { id: "vendidos",     label: "Vendidos",               colorClass: "green" },
+  { id: "perdido",      label: "Perdido",                colorClass: "red" },
 ];
 
 const VENDOR_MAP = {
@@ -25,7 +26,7 @@ const VENDOR_MAP = {
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
-const PIPELINE_STAGES = ["novo","qualificado","atendimento","visita","proposta"];
+const PIPELINE_STAGES = ["novo","atendimento","aguardando","projeto","apresentacao","negociacao"];
 const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
 
 const CSS = `
