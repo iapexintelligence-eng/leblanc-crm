@@ -305,7 +305,10 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
+  const [notes, setNotes] = useState('');
   const convRef = useRef(null);
+
+  useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
@@ -474,6 +477,34 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               <div style={S.sectionTitle}>PRÓXIMO PASSO</div>
               <div style={{fontSize:12,lineHeight:1.6,background:'#f0f9f4',padding:'10px 12px',borderRadius:6,border:'1px solid #d1f0e0'}}>{lead.ai_next_step}</div>
             </>)}
+            <div style={{marginTop:16}}>
+              <div style={S.sectionTitle}>OBSERVAÇÕES DO VENDEDOR</div>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Anotações internas, observações sobre o cliente, próximos passos..."
+                rows={4}
+                style={{
+                  width:'100%', padding:'10px 12px', border:'1px solid var(--border)',
+                  borderRadius:6, fontSize:13, lineHeight:1.6, resize:'vertical',
+                  fontFamily:'var(--sans)', boxSizing:'border-box', outline:'none'
+                }}
+              />
+              <button
+                onClick={async () => {
+                  await supabase.schema('leblanc').from('leads')
+                    .update({ notes, updated_at: new Date().toISOString() })
+                    .eq('id', lead.id);
+                  onUpdate && onUpdate({ ...lead, notes });
+                }}
+                style={{
+                  marginTop:8, padding:'7px 18px', background:'var(--dark)', color:'#fff',
+                  border:'none', borderRadius:6, fontSize:12, cursor:'pointer', float:'right'
+                }}>
+                Salvar observação
+              </button>
+              <div style={{clear:'both'}}/>
+            </div>
           </div>
         )}
 
