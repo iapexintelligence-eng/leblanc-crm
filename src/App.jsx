@@ -26,7 +26,7 @@ const VENDOR_MAP = {
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
-const PIPELINE_STAGES = ["novo","atendimento","aguardando","projeto","apresentacao","negociacao"];
+const PIPELINE_STAGES = ["novo","sem_resposta","atendimento","aguardando","projeto","apresentacao","negociacao","vendidos","perdido"];
 const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
 
 const CSS = `
@@ -151,7 +151,7 @@ const CSS = `
   .kanban{flex:1;overflow-x:auto;padding:16px 24px;display:flex;gap:12px;background:var(--bg);}
   .col{width:235px;flex-shrink:0;display:flex;flex-direction:column;}
   .ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:2px solid var(--black);}
-  .ct{font-size:9px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--dark);}
+  .ct{font-size:9px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;}
   .cc{font-size:10px;color:var(--light);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 7px;font-family:'Cormorant Garamond',serif;font-size:13px;}
   .clist{display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto;padding-bottom:8px;}
 
