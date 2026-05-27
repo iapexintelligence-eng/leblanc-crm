@@ -819,6 +819,8 @@ export default function LeBlancCRM() {
   const [fr, setFr] = useState("all");
   const [ft, setFt] = useState("all");
   const [activePage, setActivePage] = useState("pipeline");
+  const [showNewLead, setShowNewLead] = useState(false);
+  const [newLead, setNewLead] = useState({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -951,7 +953,97 @@ export default function LeBlancCRM() {
                 <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
                 <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
                 <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
+                <button
+                  onClick={()=>setShowNewLead(true)}
+                  style={{marginLeft:'auto',padding:'5px 14px',background:'var(--black)',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:500,cursor:'pointer',letterSpacing:'.06em',whiteSpace:'nowrap',fontFamily:"'Jost',sans-serif"}}>
+                  + Novo Lead
+                </button>
               </div>
+
+              {/* Modal Novo Lead */}
+              {showNewLead && (
+                <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}
+                  onClick={e=>{ if(e.target===e.currentTarget) setShowNewLead(false); }}>
+                  <div style={{background:'#fff',borderRadius:10,width:480,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,0.18)'}}>
+                    {/* Modal header */}
+                    <div style={{padding:'20px 24px 16px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:400,letterSpacing:'.04em'}}>Novo Lead</div>
+                      <button onClick={()=>setShowNewLead(false)}
+                        style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:'var(--light)',padding:'2px 6px'}}>✕</button>
+                    </div>
+                    {/* Modal body */}
+                    <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:12}}>
+                      {[
+                        { label:'Nome', field:'name', placeholder:'Nome completo' },
+                        { label:'Telefone', field:'phone', placeholder:'(00) 00000-0000' },
+                        { label:'Cidade', field:'city', placeholder:'Cidade' },
+                        { label:'Produto', field:'product', placeholder:'Ex: Cozinha planejada' },
+                        { label:'Orçamento', field:'budget', placeholder:'Ex: R$ 25.000' },
+                      ].map(({ label, field, placeholder }) => (
+                        <div key={field}>
+                          <div style={{fontSize:10,color:'var(--light)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:4}}>{label}</div>
+                          <input
+                            value={newLead[field]}
+                            onChange={e=>setNewLead(p=>({...p,[field]:e.target.value}))}
+                            placeholder={placeholder}
+                            style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:13,fontFamily:"'Jost',sans-serif",outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+                      ))}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                        <div>
+                          <div style={{fontSize:10,color:'var(--light)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:4}}>Região</div>
+                          <select value={newLead.region} onChange={e=>setNewLead(p=>({...p,region:e.target.value}))}
+                            style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:13,fontFamily:"'Jost',sans-serif",outline:'none',background:'#fff'}}>
+                            <option value="">— Selecione</option>
+                            {REGIONS.map(r=><option key={r} value={r}>{r}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,color:'var(--light)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:4}}>Temperatura</div>
+                          <select value={newLead.temperature} onChange={e=>setNewLead(p=>({...p,temperature:e.target.value}))}
+                            style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:13,fontFamily:"'Jost',sans-serif",outline:'none',background:'#fff'}}>
+                            <option value="hot">🔥 Quente</option>
+                            <option value="warm">🌤 Morno</option>
+                            <option value="cold">❄️ Frio</option>
+                          </select>
+                        </div>
+                      </div>
+                      {isGerente && (
+                        <div>
+                          <div style={{fontSize:10,color:'var(--light)',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:4}}>Vendedor</div>
+                          <select value={newLead.vendor} onChange={e=>setNewLead(p=>({...p,vendor:e.target.value}))}
+                            style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:13,fontFamily:"'Jost',sans-serif",outline:'none',background:'#fff'}}>
+                            <option value="">— Não atribuído</option>
+                            {VENDORS.map(v=><option key={v} value={v}>{v}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {/* Modal footer */}
+                    <div style={{padding:'12px 24px 20px',display:'flex',gap:8,justifyContent:'flex-end'}}>
+                      <button onClick={()=>setShowNewLead(false)}
+                        style={{padding:'8px 18px',border:'1px solid var(--border)',borderRadius:4,background:'none',fontSize:12,cursor:'pointer',fontFamily:"'Jost',sans-serif",color:'var(--mid)'}}>
+                        Cancelar
+                      </button>
+                      <button onClick={async()=>{
+                          if(!newLead.name.trim()) return;
+                          const { data } = await supabase.schema('leblanc').from('leads').insert({
+                            ...newLead,
+                            stage:'novo',
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                          }).select().single();
+                          if(data) setLeads(prev=>[data,...prev]);
+                          setNewLead({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
+                          setShowNewLead(false);
+                        }}
+                        style={{padding:'8px 22px',background:'var(--black)',color:'#fff',border:'none',borderRadius:4,fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:"'Jost',sans-serif",letterSpacing:'.06em'}}>
+                        Criar Lead
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="board">
                 <div className="kanban">
