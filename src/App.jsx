@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://kptgtftvyiyxynxkpmaw.supabase.co";
@@ -298,120 +298,327 @@ function LeadCard({ lead, selected, onClick }) {
 }
 
 function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
-  const [newNote, setNewNote] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState('ficha');
+  const [conversas, setConversas] = useState([]);
+  const [tarefas, setTarefas] = useState([]);
+  const [arquivos, setArquivos] = useState({ cliente: [], vendedor: [] });
+  const [msg, setMsg] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
+  const convRef = useRef(null);
+
+  useEffect(() => {
+    if (!lead) return;
+    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] });
+    if (tab === 'conversa') loadConversas();
+    if (tab === 'tarefas') loadTarefas();
+    if (tab === 'arquivos') loadArquivos();
+  }, [lead?.id, tab]);
+
+  async function loadConversas() {
+    const phone = lead.phone?.replace(/\D/g, '');
+    const { data } = await supabase
+      .schema('vendas_leblanc').from('conversas').select('*')
+      .eq('telefone_cliente', phone).order('criado_em', { ascending: true });
+    setConversas(data || []);
+    setTimeout(() => convRef.current?.scrollTo(0, convRef.current.scrollHeight), 150);
+  }
+
+  async function loadTarefas() {
+    const { data } = await supabase
+      .schema('vendas_leblanc').from('tarefas').select('*')
+      .eq('lead_id', lead.id).order('prazo', { ascending: true });
+    setTarefas(data || []);
+  }
+
+  async function loadArquivos() {
+    const phone = lead.phone?.replace(/\D/g, '');
+    const { data: convArq } = await supabase
+      .schema('vendas_leblanc').from('conversas').select('id,tipo,arquivo_url,arquivo_nome,criado_em,de')
+      .eq('telefone_cliente', phone).in('tipo', ['image','document','audio','video'])
+      .order('criado_em', { ascending: false });
+    const { data: storageFiles } = await supabase.storage
+      .from('leblanc-arquivos').list(`leads/${lead.id}`);
+    setArquivos({ cliente: convArq || [], vendedor: storageFiles || [] });
+  }
+
+  async function enviarMensagem() {
+    if (!msg.trim() || enviando) return;
+    setEnviando(true);
+    try {
+      await fetch('https://dinastia-n8n-editor.sw8ro0.easypanel.host/webhook/crm-send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendedor: lead.vendedor,
+          telefone: lead.phone?.replace(/\D/g, ''),
+          mensagem: msg
+        })
+      });
+      setMsg('');
+      setTimeout(loadConversas, 1200);
+    } catch { alert('Erro ao enviar mensagem'); }
+    setEnviando(false);
+  }
+
+  async function adicionarTarefa() {
+    if (!novaTarefa.descricao.trim()) return;
+    await supabase.schema('vendas_leblanc').from('tarefas').insert({
+      lead_id: lead.id, vendedor: lead.vendedor,
+      descricao: novaTarefa.descricao,
+      prazo: novaTarefa.prazo || null,
+      tipo: novaTarefa.tipo, status: 'pendente'
+    });
+    setNovaTarefa({ descricao: '', prazo: '', tipo: 'ligacao' });
+    loadTarefas();
+  }
+
+  async function toggleTarefa(id, status) {
+    await supabase.schema('vendas_leblanc').from('tarefas')
+      .update({ status: status === 'pendente' ? 'concluida' : 'pendente' }).eq('id', id);
+    loadTarefas();
+  }
+
+  async function uploadArquivo(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const path = `leads/${lead.id}/${Date.now()}_${file.name}`;
+    const { error } = await supabase.storage.from('leblanc-arquivos').upload(path, file);
+    if (!error) loadArquivos();
+    else alert('Erro no upload');
+  }
+
   if (!lead) return (
-    <div className="dempty">
-      <div className="demi">◈</div>
-      <div className="demt">Selecione um lead<br/>para ver os detalhes</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--muted)',fontSize:13}}>
+      Selecione um lead
     </div>
   );
-  const tcls = { hot:"th", warm:"tw", cold:"tc" }[lead.temperature] || "tc";
-  const tlabel = { hot:"Quente", warm:"Morno", cold:"Frio" }[lead.temperature] || "Frio";
-  const next = stageNext(lead.stage);
-  const isGerente = user?.role === "gerente";
 
-  const updateField = async (field, value) => {
-    await supabase.schema("leblanc").from("leads").update({ [field]: value, updated_at: new Date().toISOString() }).eq("id", lead.id);
-    onUpdate({ ...lead, [field]: value });
-  };
+  const TABS = [
+    { id:'ficha', label:'Ficha' },
+    { id:'conversa', label:'Conversa' },
+    { id:'tarefas', label:'Tarefas' },
+    { id:'arquivos', label:'Arquivos' },
+    { id:'historico', label:'Histórico' },
+  ];
 
-  const addFollowup = async () => {
-    if (!newNote.trim()) return;
-    setSaving(true);
-    await supabase.schema("leblanc").from("followups").insert({
-      lead_id: lead.id, tipo: "vendedor", acao: newNote.trim(), icone: "💬",
-      tempo: new Date().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }),
-    });
-    setNewNote("");
-    onUpdate({ ...lead, followups: [...(lead.followups||[]), { tipo:"vendedor", acao:newNote.trim(), icone:"💬", tempo:"agora" }] });
-    setSaving(false);
+  const S = {
+    infoBox: { background:'var(--bg2)',borderRadius:6,padding:'8px 10px',marginBottom:0 },
+    infoLabel: { fontSize:10,color:'var(--muted)',marginBottom:2 },
+    infoVal: { fontSize:13,fontWeight:500 },
+    sectionTitle: { fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',marginBottom:10 },
   };
 
   return (
-    <>
-      <div className="dh">
-        <div>
-          <div className="dname">{lead.name}</div>
-          <div className="did">{lead.id} · <span className={`ttag ${tcls}`} style={{display:"inline-flex",padding:"1px 8px",borderRadius:2,fontSize:9}}>{tlabel}</span></div>
+    <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+      {/* Header */}
+      <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--border)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div>
+            <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,lineHeight:1.2}}>{lead.nome}</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginTop:4,display:'flex',gap:6,alignItems:'center'}}>
+              <span>{lead.id}</span>
+              <span>·</span>
+              <span className={`temp ${lead.temperatura}`}>{lead.temperatura}</span>
+              <span>·</span>
+              <span>{lead.vendedor}</span>
+            </div>
+          </div>
+          <button onClick={onClose}
+            style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--muted)',padding:'4px 8px'}}>✕</button>
         </div>
-        <button className="xbtn" onClick={onClose}>✕</button>
       </div>
-      <div className="dbody">
-        <div>
-          <div className="stitle">Ficha do cliente</div>
-          <div className="igrid">
-            <div className="ifield"><div className="ilabel">Telefone</div><div className="ivalue">{lead.phone||"—"}</div></div>
-            <div className="ifield"><div className="ilabel">Região</div><div className="ivalue">{lead.region||"—"}</div></div>
-            <div className="ifield full"><div className="ilabel">Cidade</div><div className="ivalue">{lead.city||"—"}</div></div>
-            <div className="ifield full"><div className="ilabel">Produto</div><div className="ivalue">{lead.product||"—"}</div></div>
-            <div className="ifield"><div className="ilabel">Orçamento</div><div className="ivalue hi">{lead.budget||"—"}</div></div>
-            <div className="ifield">
-              <div className="ilabel">Temperatura</div>
-              <select className="iselect" value={lead.temperature||"cold"} onChange={e=>updateField("temperature",e.target.value)}>
-                <option value="hot">Quente</option>
-                <option value="warm">Morno</option>
-                <option value="cold">Frio</option>
-              </select>
-            </div>
-            {isGerente && (
-              <div className="ifield full">
-                <div className="ilabel">Vendedor atribuído</div>
-                <select className="iselect" value={lead.vendor||""} onChange={e=>updateField("vendor",e.target.value)}>
-                  <option value="">— Não atribuído</option>
-                  {Object.keys(VENDOR_MAP).map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        </div>
-        {lead.sdr_summary && (
+
+      {/* Tabs */}
+      <div style={{display:'flex',borderBottom:'1px solid var(--border)',padding:'0 8px',overflowX:'auto'}}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{
+              padding:'9px 10px',fontSize:11,fontWeight:500,whiteSpace:'nowrap',
+              border:'none',background:'none',cursor:'pointer',
+              borderBottom: tab===t.id ? '2px solid var(--dark)' : '2px solid transparent',
+              color: tab===t.id ? 'var(--dark)' : 'var(--muted)',
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Body */}
+      <div className="dbody" style={{
+        flex:1,overflowY:'auto',
+        padding: tab==='conversa' ? 0 : 14,
+        display:'flex',flexDirection:'column'
+      }}>
+
+        {/* ── FICHA ── */}
+        {tab==='ficha' && (
           <div>
-            <div className="stitle">Resumo — SDR Helena</div>
-            <div className="sdrbox">
-              <div className="sdrh"><div className="sdrdot"/><div className="sdrl">Gerado pela IA</div></div>
-              <div className="sdrt">{lead.sdr_summary}</div>
+            <div style={S.sectionTitle}>FICHA DO CLIENTE</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+              <div style={S.infoBox}><div style={S.infoLabel}>Telefone</div><div style={S.infoVal}>{lead.phone}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Região</div><div style={S.infoVal}>{lead.regiao||lead.cidade||'—'}</div></div>
+            </div>
+            <div style={{marginBottom:6}}>
+              <div style={S.infoBox}><div style={S.infoLabel}>Produto</div><div style={S.infoVal}>{lead.produto||'—'}</div></div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:16}}>
+              <div style={S.infoBox}><div style={S.infoLabel}>Orçamento</div><div style={S.infoVal}>{lead.orcamento||'—'}</div></div>
+              <div style={S.infoBox}><div style={S.infoLabel}>Vendedor</div><div style={S.infoVal}>{lead.vendedor||'—'}</div></div>
+            </div>
+            {lead.resumo_sdr && (<>
+              <div style={S.sectionTitle}>RESUMO DA HELENA</div>
+              <div style={{fontSize:12,lineHeight:1.6,background:'var(--bg2)',padding:'10px 12px',borderRadius:6,marginBottom:16}}>{lead.resumo_sdr}</div>
+            </>)}
+            {lead.proximo_passo && (<>
+              <div style={S.sectionTitle}>PRÓXIMO PASSO</div>
+              <div style={{fontSize:12,lineHeight:1.6,background:'#f0f9f4',padding:'10px 12px',borderRadius:6,border:'1px solid #d1f0e0'}}>{lead.proximo_passo}</div>
+            </>)}
+          </div>
+        )}
+
+        {/* ── CONVERSA ── */}
+        {tab==='conversa' && (
+          <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+            <div style={{fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',padding:'10px 14px 4px'}}>
+              CONVERSA WHATSAPP — {(lead.vendedor||'').toUpperCase()}
+            </div>
+            <div ref={convRef} style={{flex:1,overflowY:'auto',padding:'6px 14px',display:'flex',flexDirection:'column',gap:8}}>
+              {conversas.length===0 && (
+                <div style={{textAlign:'center',color:'var(--muted)',fontSize:12,marginTop:40}}>
+                  Nenhuma mensagem registrada ainda
+                </div>
+              )}
+              {conversas.map(c => (
+                <div key={c.id} style={{display:'flex',flexDirection:'column',alignItems: c.de==='vendedor'?'flex-end':'flex-start'}}>
+                  <div style={{
+                    maxWidth:'82%',padding:'8px 12px',fontSize:13,lineHeight:1.5,
+                    borderRadius: c.de==='vendedor' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                    background: c.de==='vendedor' ? 'var(--dark)' : '#f0f0f0',
+                    color: c.de==='vendedor' ? '#fff' : 'var(--dark)',
+                  }}>{c.mensagem}</div>
+                  <div style={{fontSize:10,color:'var(--muted)',marginTop:2,padding:'0 4px'}}>
+                    {c.de==='vendedor' ? lead.vendedor : lead.nome} · {new Date(c.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:'10px 14px',borderTop:'1px solid var(--border)',display:'flex',gap:8,flexShrink:0}}>
+              <input value={msg} onChange={e=>setMsg(e.target.value)}
+                onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviarMensagem();} }}
+                placeholder="Escreva uma mensagem..."
+                style={{flex:1,padding:'8px 12px',border:'1px solid var(--border)',borderRadius:20,fontSize:12,outline:'none'}}/>
+              <button onClick={enviarMensagem} disabled={enviando}
+                style={{padding:'8px 16px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:20,fontSize:12,cursor:'pointer',opacity:enviando?.6:1}}>
+                {enviando?'…':'Enviar'}
+              </button>
             </div>
           </div>
         )}
-        {lead.ai_next_step && (
+
+        {/* ── TAREFAS ── */}
+        {tab==='tarefas' && (
           <div>
-            <div className="stitle">Próximo passo</div>
-            <div className="aibox">
-              <div className="aih"><span style={{color:"rgba(255,255,255,0.4)"}}>◆</span><span className="ail">Sugestão da IA</span></div>
-              <div className="ait">{lead.ai_next_step}</div>
-              <div className="aiacts">
-                <button className="aibtn">Agendar</button>
-                <button className="aibtn">WhatsApp</button>
+            <div style={S.sectionTitle}>TAREFAS E FOLLOW-UPS</div>
+            {tarefas.length===0 && <div style={{color:'var(--muted)',fontSize:12,marginBottom:14}}>Nenhuma tarefa ainda</div>}
+            {tarefas.map(t => (
+              <div key={t.id} onClick={()=>toggleTarefa(t.id,t.status)}
+                style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'var(--bg2)',
+                  borderRadius:6,marginBottom:6,cursor:'pointer',opacity:t.status==='concluida'?.5:1}}>
+                <div style={{width:16,height:16,borderRadius:'50%',flexShrink:0,
+                  border:'2px solid var(--dark)',background:t.status==='concluida'?'var(--dark)':'transparent'}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,textDecoration:t.status==='concluida'?'line-through':'none'}}>{t.descricao}</div>
+                  {t.prazo&&<div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>
+                    ⏱ {new Date(t.prazo).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                  </div>}
+                </div>
+                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,
+                  background:t.status==='pendente'?'#fff3e0':'#e8f5e9',
+                  color:t.status==='pendente'?'#e65100':'#2e7d32'}}>
+                  {t.status==='pendente'?'Pendente':'Concluída'}
+                </span>
+              </div>
+            ))}
+            <div style={{marginTop:14,padding:'12px',background:'var(--bg2)',borderRadius:6}}>
+              <div style={{...S.sectionTitle,marginBottom:8}}>NOVA TAREFA</div>
+              <input value={novaTarefa.descricao} onChange={e=>setNovaTarefa(p=>({...p,descricao:e.target.value}))}
+                placeholder="Descrição da tarefa..."
+                style={{width:'100%',padding:'7px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:12,marginBottom:6,boxSizing:'border-box'}}/>
+              <div style={{display:'flex',gap:6}}>
+                <input type="datetime-local" value={novaTarefa.prazo} onChange={e=>setNovaTarefa(p=>({...p,prazo:e.target.value}))}
+                  style={{flex:1,padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:11}}/>
+                <button onClick={adicionarTarefa}
+                  style={{padding:'6px 14px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:4,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  + Adicionar
+                </button>
               </div>
             </div>
           </div>
         )}
-        <div>
-          <div className="stitle">Histórico</div>
-          <div className="tl">
-            {(lead.followups||[]).map((f,i)=>(
-              <div className="tli" key={i}>
-                <div className="tlic">{f.icone||"•"}</div>
-                <div className="tlb">
-                  <div className="tla">{f.acao}</div>
-                  <div className="tlm">{{sdr:"SDR Helena",vendedor:lead.vendor||"Vendedor",sistema:"Sistema"}[f.tipo]||"Sistema"} · {f.tempo}</div>
+
+        {/* ── ARQUIVOS ── */}
+        {tab==='arquivos' && (
+          <div>
+            <div style={S.sectionTitle}>ENVIADOS PELO CLIENTE</div>
+            {arquivos.cliente.length===0&&<div style={{color:'var(--muted)',fontSize:12,marginBottom:16}}>Nenhum arquivo enviado pelo cliente</div>}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:20}}>
+              {arquivos.cliente.map(a=>(
+                <a key={a.id} href={a.arquivo_url} target="_blank" rel="noreferrer"
+                  style={{background:'var(--bg2)',borderRadius:6,padding:'10px 6px',textDecoration:'none',color:'var(--dark)',textAlign:'center',display:'block'}}>
+                  <div style={{fontSize:22}}>{a.tipo==='image'?'🖼':a.tipo==='audio'?'🎵':'📄'}</div>
+                  <div style={{fontSize:10,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.arquivo_nome||'Arquivo'}</div>
+                  <div style={{fontSize:9,color:'var(--muted)'}}>{a.de}</div>
+                </a>
+              ))}
+            </div>
+            <div style={S.sectionTitle}>ANEXADOS PELO VENDEDOR</div>
+            {arquivos.vendedor.length===0&&<div style={{color:'var(--muted)',fontSize:12,marginBottom:10}}>Nenhum arquivo anexado ainda</div>}
+            {arquivos.vendedor.map(f=>(
+              <div key={f.name} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--bg2)',borderRadius:6,marginBottom:4}}>
+                <span>📎</span>
+                <span style={{fontSize:12,flex:1}}>{f.name}</span>
+                <span style={{fontSize:10,color:'var(--muted)'}}>{f.metadata?.size?((f.metadata.size/1024).toFixed(0)+' KB'):''}</span>
+              </div>
+            ))}
+            <label style={{display:'block',marginTop:12,padding:'12px',border:'1.5px dashed var(--border)',borderRadius:6,textAlign:'center',cursor:'pointer',fontSize:12,color:'var(--muted)'}}>
+              📎 Clique para anexar arquivo
+              <input type="file" hidden onChange={uploadArquivo} accept=".pdf,.jpg,.jpeg,.png,.dwg,.docx,.xlsx"/>
+            </label>
+          </div>
+        )}
+
+        {/* ── HISTÓRICO ── */}
+        {tab==='historico' && (
+          <div>
+            <div style={S.sectionTitle}>LINHA DO TEMPO</div>
+            {[
+              { icon:'🤖', label:'Helena iniciou atendimento', tempo:lead.criado_em, who:'SDR Helena' },
+              lead.vendedor ? { icon:'✅', label:`Lead repassado para ${lead.vendedor}`, tempo:lead.updated_at, who:'SDR Helena' } : null,
+              lead.stage!=='novo_lead' ? { icon:'💬', label:`Vendedor em ${lead.stage}`, tempo:lead.updated_at, who:lead.vendedor } : null,
+            ].filter(Boolean).map((h,i)=>(
+              <div key={i} style={{display:'flex',gap:12,paddingBottom:18,position:'relative'}}>
+                <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{h.icon}</div>
+                <div style={{flex:1,paddingTop:4}}>
+                  <div style={{fontSize:13}}>{h.label}</div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>
+                    {h.who} · {h.tempo ? new Date(h.tempo).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="add-fu" style={{marginTop:12}}>
-            <input className="fu-input" placeholder="Adicionar anotação..." value={newNote} onChange={e=>setNewNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addFollowup()}/>
-            <button className="fu-btn" onClick={addFollowup} disabled={saving}>{saving?"...":"Salvar"}</button>
-          </div>
-        </div>
+        )}
+
       </div>
+
+      {/* Footer */}
       <div className="dfoot">
-        <button className="bact">Ligar</button>
-        <button className="bact">Proposta</button>
-        {next && <button className="badv" onClick={()=>onAdvance(lead.id,next.id)}>→ {next.label}</button>}
+        <button className="btn-sec" onClick={()=>window.open(`tel:${lead.phone}`)}>📞 Ligar</button>
+        <button className="btn-sec" onClick={()=>window.open(`https://wa.me/${lead.phone?.replace(/\D/g,'')}`)}>💬 WhatsApp</button>
+        <button className="btn-gold" onClick={onAdvance}>→ Avançar</button>
       </div>
-    </>
+    </div>
   );
 }
 
