@@ -689,7 +689,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       <div className="dfoot">
         <button className="btn-sec" onClick={()=>window.open(`tel:${lead.phone}`)}>📞 Ligar</button>
         <button className="btn-sec" onClick={()=>window.open(`https://wa.me/${lead.phone?.replace(/\D/g,'')}`)}>💬 WhatsApp</button>
-        <button className="btn-gold" onClick={onAdvance}>→ Avançar</button>
+        <button className="btn-gold" onClick={()=>onAdvance(lead)}>→ Avançar</button>
       </div>
     </div>
   );
@@ -946,10 +946,18 @@ export default function LeBlancCRM() {
     setSelected(updated);
   };
 
-  const handleAdvance = async (id, nextStage) => {
-    await supabase.schema("leblanc").from("leads").update({ stage: nextStage, updated_at: new Date().toISOString() }).eq("id", id);
-    handleUpdate({ ...selected, stage: nextStage });
-  };
+  async function handleAdvance(lead) {
+    const idx = STAGES.findIndex(s => s.id === lead.stage);
+    if (idx === -1 || idx >= STAGES.length - 2) return;
+    const nextStage = STAGES[idx + 1].id;
+    await supabase.schema('leblanc').from('leads')
+      .update({ stage: nextStage, updated_at: new Date().toISOString() })
+      .eq('id', lead.id);
+    setLeads(prev => prev.map(l =>
+      l.id === lead.id ? { ...l, stage: nextStage } : l
+    ));
+    setSelected(prev => prev ? { ...prev, stage: nextStage } : null);
+  }
 
   if (!session) return <LoginScreen/>;
   if (loading) return <><style>{CSS}</style><div className="loading">Carregando pipeline...</div></>;
