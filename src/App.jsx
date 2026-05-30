@@ -779,30 +779,37 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
         {/* ── HISTÓRICO ── */}
         {tab==='historico' && (
-          <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
-            <div style={{fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',paddingBottom:12}}>
-              CONVERSA COM A HELENA
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:4}}>Linha do tempo</div>
+            <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+              <span style={{fontSize:16}}>✨</span>
+              <div>
+                <div style={{fontSize:12}}>Lead criado pela Helena</div>
+                <div style={{fontSize:11,color:'var(--muted)'}}>{lead.created_at ? new Date(lead.created_at).toLocaleString('pt-BR') : '—'}</div>
+              </div>
             </div>
-            <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
-              {helenaChats.length===0 && <div style={{color:'var(--muted)',fontSize:12,textAlign:'center',marginTop:40}}>Nenhuma conversa registrada</div>}
-              {helenaChats.map((c,i)=>{
-                const isAI=c.message?.type==='ai';
-                const content=c.message?.content;
-                if(!content||content==='undefined') return null;
-                return (
-                  <div key={i} style={{display:'flex',flexDirection:'column',alignItems:isAI?'flex-start':'flex-end'}}>
-                    <div style={{maxWidth:'85%',padding:'8px 12px',fontSize:12,lineHeight:1.6,whiteSpace:'pre-wrap',
-                      borderRadius:isAI?'12px 12px 12px 2px':'12px 12px 2px 12px',
-                      background:isAI?'#f0f0f0':'var(--dark)',color:isAI?'var(--dark)':'#fff'}}>
-                      {content}
-                    </div>
-                    <div style={{fontSize:10,color:'var(--muted)',marginTop:2,padding:'0 4px'}}>
-                      {isAI?'🤖 Helena':'👤 Cliente'}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {lead.assigned_at && (
+              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                <span style={{fontSize:16}}>👤</span>
+                <div>
+                  <div style={{fontSize:12}}>Passado para {lead.vendor||'vendedor'}</div>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(lead.assigned_at).toLocaleString('pt-BR')}</div>
+                </div>
+              </div>
+            )}
+            {followups.length > 0 ? followups.map(f => (
+              <div key={f.id} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                <span style={{fontSize:16}}>📝</span>
+                <div>
+                  <div style={{fontSize:12}}>{f.content||f.nota||f.text||f.acao||'—'}</div>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(f.created_at).toLocaleString('pt-BR')}</div>
+                </div>
+              </div>
+            )) : (
+              <div style={{textAlign:'center',color:'#666',fontSize:'12px',padding:'20px'}}>
+                Histórico de eventos em breve
+              </div>
+            )}
           </div>
         )}
 
