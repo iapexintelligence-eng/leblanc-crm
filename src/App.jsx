@@ -326,8 +326,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function loadConversas() {
     const { data, error } = await supabase
-      .schema('vendas_leblanc')
-      .from('conversas')
+      .from('leblanc_conversas')
       .select('id, de, mensagem, vendedor, created_at')
       .or(`lead_id.eq.${lead.id},telefone_cliente.eq.${lead.phone}`)
       .order('created_at', { ascending: true });
@@ -338,7 +337,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function loadTarefas() {
     const { data } = await supabase
-      .schema('vendas_leblanc').from('tarefas').select('*')
+      .from('leblanc_tarefas').select('*')
       .eq('lead_id', lead.id).order('prazo', { ascending: true });
     setTarefas(data || []);
   }
@@ -362,8 +361,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function fetchHelenaHistory(lead) {
     const { data, error } = await supabase
-      .schema('leblanc')
-      .from('sdr_chats')
+      .from('leblanc_sdr_chats')
       .select('id, session_id, message')
       .eq('session_id', lead.phone)
       .order('id', { ascending: true });
@@ -379,7 +377,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function loadHelena() {
     const phone = lead.phone?.replace(/\D/g,'');
-    const { data } = await supabase.schema('leblanc').from('sdr_chats')
+    const { data } = await supabase.from('leblanc_sdr_chats')
       .select('*').eq('session_id', phone).order('id',{ascending:true});
     setHelenaChats(data||[]);
   }
@@ -405,7 +403,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function adicionarTarefa() {
     if (!novaTarefa.descricao.trim()) return;
-    const { data, error } = await supabase.schema('vendas_leblanc').from('tarefas').insert({
+    const { data, error } = await supabase.from('leblanc_tarefas').insert({
       lead_id: lead.id,
       vendedor: lead.vendor || '',
       titulo: novaTarefa.descricao,
@@ -422,7 +420,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   }
 
   async function toggleTarefa(id, status) {
-    await supabase.schema('vendas_leblanc').from('tarefas')
+    await supabase.from('leblanc_tarefas')
       .update({ status: status === 'pendente' ? 'concluida' : 'pendente' }).eq('id', id);
     loadTarefas();
   }
