@@ -460,6 +460,15 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+      <style>{`
+        .chat-scroll::-webkit-scrollbar { width: 8px; }
+        .chat-scroll::-webkit-scrollbar-track { background: #1a1a1a; border-radius: 4px; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #888; }
+        .drawer-body::-webkit-scrollbar { width: 8px; }
+        .drawer-body::-webkit-scrollbar-track { background: #111; }
+        .drawer-body::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+      `}</style>
       {/* Header */}
       <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--border)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
@@ -494,7 +503,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       </div>
 
       {/* Body */}
-      <div className="dbody" style={{
+      <div className="dbody drawer-body" style={{
         flex:1,overflowY:'auto',
         padding: tab==='conversa' ? 0 : 14,
         display:'flex',flexDirection:'column'
@@ -632,7 +641,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             </div>
             {/* Conversa com Helena */}
             <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:12}}>Conversa com a Helena</div>
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <div className="chat-scroll" style={{display:'flex',flexDirection:'column',gap:8,overflowY:'scroll',flex:1,minHeight:'280px',maxHeight:'420px',padding:'12px 16px',scrollbarWidth:'auto',scrollbarColor:'#555 #1a1a1a'}}>
               {helenaHistory.length===0 && (
                 <div style={{fontSize:12,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma conversa registrada</div>
               )}
@@ -642,11 +651,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 return (
                   <div key={row.id} style={{
                     alignSelf: isHelena ? 'flex-end' : 'flex-start',
-                    maxWidth:'80%', padding:'8px 12px', borderRadius:12,
+                    maxWidth:'78%',
+                    padding:'10px 14px',
+                    borderRadius: isHelena ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                     background: isHelena ? '#1a1a2e' : '#2a2a2a',
-                    fontSize:12, lineHeight:1.5, color:'var(--color-text-primary)', marginBottom:4
+                    fontSize:13, lineHeight:1.6, color:'#e8e8e8',
+                    wordBreak:'break-word', whiteSpace:'pre-wrap', marginBottom:2
                   }}>
-                    <div style={{fontSize:10,color:'#888',marginBottom:3}}>
+                    <div style={{fontSize:10,color:'#888',marginBottom:4,fontWeight:500}}>
                       {isHelena ? '🤖 Helena' : '👤 Cliente'}
                     </div>
                     {texto}
@@ -663,7 +675,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             <div style={{fontSize:10,fontWeight:600,letterSpacing:'.1em',color:'var(--muted)',padding:'10px 14px 4px'}}>
               CONVERSA WHATSAPP — {(lead.vendor||'').toUpperCase()}
             </div>
-            <div ref={convRef} style={{flex:1,overflowY:'auto',padding:'6px 14px',display:'flex',flexDirection:'column',gap:8}}>
+            <div ref={convRef} className="chat-scroll" style={{display:'flex',flexDirection:'column',gap:8,overflowY:'scroll',flex:1,minHeight:'280px',maxHeight:'420px',padding:'12px 16px',scrollbarWidth:'auto',scrollbarColor:'#555 #1a1a1a'}}>
               {vendorConversas.length===0 && (
                 <div style={{textAlign:'center',color:'var(--muted)',fontSize:12,marginTop:40}}>
                   Nenhuma mensagem registrada ainda
@@ -674,11 +686,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 return (
                   <div key={msg.id} style={{
                     alignSelf: isVendedor ? 'flex-end' : 'flex-start',
-                    maxWidth:'80%', padding:'8px 12px', borderRadius:12,
+                    maxWidth:'78%',
+                    padding:'10px 14px',
+                    borderRadius: isVendedor ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                     background: isVendedor ? '#1a2e1a' : '#2a2a2a',
-                    fontSize:12, lineHeight:1.5, color:'var(--color-text-primary)', marginBottom:4
+                    fontSize:13, lineHeight:1.6, color:'#e8e8e8',
+                    wordBreak:'break-word', whiteSpace:'pre-wrap', marginBottom:2
                   }}>
-                    <div style={{fontSize:10,color:'#888',marginBottom:3}}>
+                    <div style={{fontSize:10,color:'#888',marginBottom:4,fontWeight:500}}>
                       {isVendedor ? `🟢 ${msg.vendedor}` : '👤 Cliente'}
                       {' · '}
                       {new Date(msg.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
