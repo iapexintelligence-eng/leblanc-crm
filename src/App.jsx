@@ -302,7 +302,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [conversas, setConversas] = useState([]);
   const [vendorConversas, setVendorConversas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
-  const [arquivos, setArquivos] = useState({ cliente: [], vendedor: [] });
+  const [arquivos, setArquivos] = useState([]);
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
@@ -316,7 +316,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   useEffect(() => {
     if (!lead) return;
-    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] }); setHelenaChats([]); setHelenaHistory([]); setFollowups([]);
+    setConversas([]); setTarefas([]); setArquivos([]); setHelenaChats([]); setHelenaHistory([]); setFollowups([]);
     if (tab === 'conversa') loadConversas();
     if (tab === 'tarefas') loadTarefas();
     if (tab === 'arquivos') loadArquivos();
@@ -344,23 +344,20 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   }
 
   async function loadArquivos() {
-    const phone = lead.phone?.replace(/\D/g, '');
-    const { data: convArq } = await supabase
-      .schema('vendas_leblanc').from('conversas').select('id,tipo,arquivo_url,arquivo_nome,criado_em,de')
-      .eq('telefone_cliente', phone).in('tipo', ['image','document','audio','video'])
-      .order('criado_em', { ascending: false });
-    const { data: storageFiles } = await supabase.storage
-      .from('leblanc-arquivos').list(`leads/${lead.id}`);
-
-    const filesWithUrls = await Promise.all(
-      (storageFiles || []).filter(f => f.name !== '.emptyFolderPlaceholder').map(async (f) => {
-        const { data: urlData } = await supabase.storage
-          .from('leblanc-arquivos')
-          .createSignedUrl(`leads/${lead.id}/${f.name}`, 3600);
-        return { ...f, signedUrl: urlData?.signedUrl };
-      })
-    );
-    setArquivos({ cliente: convArq || [], vendedor: filesWithUrls });
+    const { data, error } = await supabase.storage
+      .from('leblanc-arquivos')
+      .list(`leads/${lead.id}`, { limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'desc' } });
+    if (!error && data) {
+      const arquivosComUrl = data
+        .filter(f => f.name !== '.emptyFolderPlaceholder')
+        .map(f => ({
+          ...f,
+          url: `https://kptgtftvyiyxynxkpmaw.supabase.co/storage/v1/object/public/leblanc-arquivos/leads/${lead.id}/${f.name}`
+        }));
+      setArquivos(arquivosComUrl);
+    } else {
+      setArquivos([]);
+    }
   }
 
   async function fetchHelenaHistory(lead) {
@@ -408,14 +405,20 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   async function adicionarTarefa() {
     if (!novaTarefa.descricao.trim()) return;
-    await supabase.schema('vendas_leblanc').from('tarefas').insert({
-      lead_id: lead.id, vendedor: lead.vendor,
-      descricao: novaTarefa.descricao,
+    const { data, error } = await supabase.schema('vendas_leblanc').from('tarefas').insert({
+      lead_id: lead.id,
+      vendedor: lead.vendor || '',
+      titulo: novaTarefa.descricao,
       prazo: novaTarefa.prazo || null,
-      tipo: novaTarefa.tipo, status: 'pendente'
-    });
-    setNovaTarefa({ descricao: '', prazo: '', tipo: 'ligacao' });
-    loadTarefas();
+      status: 'pendente'
+    }).select().single();
+    if (!error && data) {
+      setTarefas(prev => [...prev, data]);
+      setNovaTarefa({ descricao: '', prazo: '', tipo: 'ligacao' });
+    } else {
+      console.error('Erro ao salvar tarefa:', error);
+      loadTarefas();
+    }
   }
 
   async function toggleTarefa(id, status) {
@@ -742,26 +745,15 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
         {/* ── ARQUIVOS ── */}
         {tab==='arquivos' && (
           <div>
-            <div style={S.sectionTitle}>ENVIADOS PELO CLIENTE</div>
-            {arquivos.cliente.length===0&&<div style={{color:'var(--muted)',fontSize:12,marginBottom:16}}>Nenhum arquivo enviado pelo cliente</div>}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginBottom:20}}>
-              {arquivos.cliente.map(a=>(
-                <a key={a.id} href={a.arquivo_url} target="_blank" rel="noreferrer"
-                  style={{background:'var(--bg2)',borderRadius:6,padding:'10px 6px',textDecoration:'none',color:'var(--dark)',textAlign:'center',display:'block'}}>
-                  <div style={{fontSize:22}}>{a.tipo==='image'?'🖼':a.tipo==='audio'?'🎵':'📄'}</div>
-                  <div style={{fontSize:10,marginTop:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.arquivo_nome||'Arquivo'}</div>
-                  <div style={{fontSize:9,color:'var(--muted)'}}>{a.de}</div>
-                </a>
-              ))}
-            </div>
-            <div style={S.sectionTitle}>ANEXADOS PELO VENDEDOR</div>
-            {arquivos.vendedor.length===0&&<div style={{color:'var(--muted)',fontSize:12,marginBottom:10}}>Nenhum arquivo anexado ainda</div>}
-            {arquivos.vendedor.map(f=>(
-              <div key={f.name} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--bg2)',borderRadius:6,marginBottom:4}}>
+            <div style={S.sectionTitle}>ARQUIVOS DO LEAD</div>
+            {arquivos.length===0&&<div style={{color:'var(--muted)',fontSize:12,marginBottom:10}}>Nenhum arquivo ainda</div>}
+            {arquivos.map(f=>(
+              <a key={f.name} href={f.url} target="_blank" rel="noopener noreferrer"
+                style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--bg2)',borderRadius:6,marginBottom:4,textDecoration:'none',color:'var(--dark)'}}>
                 <span>📎</span>
                 <span style={{fontSize:12,flex:1}}>{f.name}</span>
                 <span style={{fontSize:10,color:'var(--muted)'}}>{f.metadata?.size?((f.metadata.size/1024).toFixed(0)+' KB'):''}</span>
-              </div>
+              </a>
             ))}
             <label style={{display:'block',marginTop:12,padding:'12px',border:'1.5px dashed var(--border)',borderRadius:6,textAlign:'center',cursor:'pointer',fontSize:12,color:'var(--muted)'}}>
               📎 Clique para anexar arquivo
