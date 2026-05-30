@@ -300,6 +300,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
 function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [tab, setTab] = useState('ficha');
   const [conversas, setConversas] = useState([]);
+  const [vendorConversas, setVendorConversas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   const [arquivos, setArquivos] = useState({ cliente: [], vendedor: [] });
   const [msg, setMsg] = useState('');
@@ -324,11 +325,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   }, [lead?.id, tab]);
 
   async function loadConversas() {
-    const phone = lead.phone?.replace(/\D/g, '');
-    const { data } = await supabase
-      .schema('vendas_leblanc').from('conversas').select('*')
-      .eq('telefone_cliente', phone).order('criado_em', { ascending: true });
-    setConversas(data || []);
+    const { data, error } = await supabase
+      .schema('vendas_leblanc')
+      .from('conversas')
+      .select('id, de, mensagem, vendedor, created_at')
+      .or(`lead_id.eq.${lead.id},telefone_cliente.eq.${lead.phone}`)
+      .order('created_at', { ascending: true });
+    if (error) console.error('Erro conversa vendedor:', error);
+    setVendorConversas(data || []);
     setTimeout(() => convRef.current?.scrollTo(0, convRef.current.scrollHeight), 150);
   }
 
@@ -360,11 +364,13 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   }
 
   async function fetchHelenaHistory(lead) {
-    const { data } = await supabase
-      .from('n8n_chat_histories')
-      .select('*')
+    const { data, error } = await supabase
+      .schema('leblanc')
+      .from('sdr_chats')
+      .select('id, session_id, message')
       .eq('session_id', lead.phone)
       .order('id', { ascending: true });
+    if (error) console.error('Erro Helena:', error);
     setHelenaHistory(data || []);
     const { data: fups } = await supabase
       .from('followups')
@@ -627,24 +633,20 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               {helenaHistory.length===0 && (
                 <div style={{fontSize:12,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma conversa registrada</div>
               )}
-              {helenaHistory.map((msg,i) => {
-                let content = msg.message || msg.content || '';
-                let isHelena = false;
-                try {
-                  const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-                  if (parsed?.type==='ai' || parsed?.role==='assistant') isHelena = true;
-                  content = parsed?.data?.content || parsed?.content || parsed?.text || content;
-                } catch {}
+              {helenaHistory.map((row) => {
+                const isHelena = row.message?.type === 'ai';
+                const texto = row.message?.content || '';
                 return (
-                  <div key={i} style={{display:'flex',flexDirection:'column',alignItems:isHelena?'flex-end':'flex-start'}}>
-                    <div style={{
-                      maxWidth:'80%',padding:'8px 12px',borderRadius:isHelena?'12px 12px 2px 12px':'12px 12px 12px 2px',
-                      background:isHelena?'var(--dark)':'#f0f0f0',
-                      color:isHelena?'#fff':'var(--dark)',fontSize:12,lineHeight:1.5,whiteSpace:'pre-wrap'
-                    }}>
-                      <div style={{fontSize:10,opacity:.6,marginBottom:4}}>{isHelena?'🤖 Helena':'👤 Cliente'}</div>
-                      {typeof content==='string'?content:JSON.stringify(content)}
+                  <div key={row.id} style={{
+                    alignSelf: isHelena ? 'flex-end' : 'flex-start',
+                    maxWidth:'80%', padding:'8px 12px', borderRadius:12,
+                    background: isHelena ? '#1a1a2e' : '#2a2a2a',
+                    fontSize:12, lineHeight:1.5, color:'var(--color-text-primary)', marginBottom:4
+                  }}>
+                    <div style={{fontSize:10,color:'#888',marginBottom:3}}>
+                      {isHelena ? '🤖 Helena' : '👤 Cliente'}
                     </div>
+                    {texto}
                   </div>
                 );
               })}
@@ -659,24 +661,29 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               CONVERSA WHATSAPP — {(lead.vendor||'').toUpperCase()}
             </div>
             <div ref={convRef} style={{flex:1,overflowY:'auto',padding:'6px 14px',display:'flex',flexDirection:'column',gap:8}}>
-              {conversas.length===0 && (
+              {vendorConversas.length===0 && (
                 <div style={{textAlign:'center',color:'var(--muted)',fontSize:12,marginTop:40}}>
                   Nenhuma mensagem registrada ainda
                 </div>
               )}
-              {conversas.map(c => (
-                <div key={c.id} style={{display:'flex',flexDirection:'column',alignItems: c.de==='vendedor'?'flex-end':'flex-start'}}>
-                  <div style={{
-                    maxWidth:'82%',padding:'8px 12px',fontSize:13,lineHeight:1.5,
-                    borderRadius: c.de==='vendedor' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                    background: c.de==='vendedor' ? 'var(--dark)' : '#f0f0f0',
-                    color: c.de==='vendedor' ? '#fff' : 'var(--dark)',
-                  }}>{c.mensagem}</div>
-                  <div style={{fontSize:10,color:'var(--muted)',marginTop:2,padding:'0 4px'}}>
-                    {c.de==='vendedor' ? lead.vendor : lead.name} · {new Date(c.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+              {vendorConversas.map((msg) => {
+                const isVendedor = msg.de === 'vendedor';
+                return (
+                  <div key={msg.id} style={{
+                    alignSelf: isVendedor ? 'flex-end' : 'flex-start',
+                    maxWidth:'80%', padding:'8px 12px', borderRadius:12,
+                    background: isVendedor ? '#1a2e1a' : '#2a2a2a',
+                    fontSize:12, lineHeight:1.5, color:'var(--color-text-primary)', marginBottom:4
+                  }}>
+                    <div style={{fontSize:10,color:'#888',marginBottom:3}}>
+                      {isVendedor ? `🟢 ${msg.vendedor}` : '👤 Cliente'}
+                      {' · '}
+                      {new Date(msg.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                    </div>
+                    {msg.mensagem}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div style={{padding:'10px 14px',borderTop:'1px solid var(--border)',display:'flex',gap:8,flexShrink:0}}>
               <input value={msg} onChange={e=>setMsg(e.target.value)}
