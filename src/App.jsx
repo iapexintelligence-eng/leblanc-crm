@@ -307,17 +307,20 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
   const [notes, setNotes] = useState('');
   const [helenaChats, setHelenaChats] = useState([]);
+  const [helenaHistory, setHelenaHistory] = useState([]);
+  const [followups, setFollowups] = useState([]);
   const convRef = useRef(null);
 
-  useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
+  useEffect(() => { setNotes(lead?.vendor_notes || lead?.notes || ''); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
-    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] }); setHelenaChats([]);
+    setConversas([]); setTarefas([]); setArquivos({ cliente: [], vendedor: [] }); setHelenaChats([]); setHelenaHistory([]); setFollowups([]);
     if (tab === 'conversa') loadConversas();
     if (tab === 'tarefas') loadTarefas();
     if (tab === 'arquivos') loadArquivos();
     if (tab === 'historico') loadHelena();
+    if (tab === 'helena') fetchHelenaHistory(lead);
   }, [lead?.id, tab]);
 
   async function loadConversas() {
@@ -354,6 +357,21 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       })
     );
     setArquivos({ cliente: convArq || [], vendedor: filesWithUrls });
+  }
+
+  async function fetchHelenaHistory(lead) {
+    const { data } = await supabase
+      .from('n8n_chat_histories')
+      .select('*')
+      .eq('session_id', lead.phone)
+      .order('id', { ascending: true });
+    setHelenaHistory(data || []);
+    const { data: fups } = await supabase
+      .from('followups')
+      .select('*')
+      .eq('lead_id', lead.id)
+      .order('created_at', { ascending: true });
+    setFollowups(fups || []);
   }
 
   async function loadHelena() {
@@ -417,6 +435,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   const TABS = [
     { id:'ficha', label:'Ficha' },
+    { id:'helena', label:'Helena' },
     { id:'conversa', label:'Conversa' },
     { id:'tarefas', label:'Tarefas' },
     { id:'arquivos', label:'Arquivos' },
@@ -504,6 +523,26 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 </select>
               </div>
             </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:6}}>Temperatura</div>
+              <div style={{display:'flex',gap:8}}>
+                {['hot','warm','cold'].map(t => (
+                  <button key={t} onClick={async () => {
+                    await supabase.schema('leblanc').from('leads')
+                      .update({ temperature: t, updated_at: new Date().toISOString() })
+                      .eq('id', lead.id);
+                    onUpdate && onUpdate({ ...lead, temperature: t });
+                  }} style={{
+                    padding:'4px 12px', borderRadius:20, border:'1px solid', fontSize:12, cursor:'pointer',
+                    background: lead.temperature === t ? (t==='hot'?'#ef4444':t==='warm'?'#f59e0b':'#3b82f6') : 'transparent',
+                    color: lead.temperature === t ? '#fff' : '#888',
+                    borderColor: t==='hot'?'#ef4444':t==='warm'?'#f59e0b':'#3b82f6'
+                  }}>
+                    {t==='hot'?'🔥 Quente':t==='warm'?'🌤 Morno':'❄️ Frio'}
+                  </button>
+                ))}
+              </div>
+            </div>
             {lead.sdr_summary && (<>
               <div style={S.sectionTitle}>RESUMO DA HELENA</div>
               <div style={{fontSize:12,lineHeight:1.6,background:'var(--bg2)',padding:'10px 12px',borderRadius:6,marginBottom:16}}>{lead.sdr_summary}</div>
@@ -527,10 +566,17 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               />
               <button
                 onClick={async () => {
-                  await supabase.schema('leblanc').from('leads')
-                    .update({ notes, updated_at: new Date().toISOString() })
+                  const { error } = await supabase.schema('leblanc').from('leads')
+                    .update({ vendor_notes: notes, updated_at: new Date().toISOString() })
                     .eq('id', lead.id);
-                  onUpdate && onUpdate({ ...lead, notes });
+                  if (error) {
+                    await supabase.schema('leblanc').from('leads')
+                      .update({ notes, updated_at: new Date().toISOString() })
+                      .eq('id', lead.id);
+                    onUpdate && onUpdate({ ...lead, notes });
+                  } else {
+                    onUpdate && onUpdate({ ...lead, vendor_notes: notes });
+                  }
                 }}
                 style={{
                   marginTop:8, padding:'7px 18px', background:'var(--dark)', color:'#fff',
@@ -539,6 +585,69 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 Salvar observação
               </button>
               <div style={{clear:'both'}}/>
+            </div>
+          </div>
+        )}
+
+        {/* ── HELENA ── */}
+        {tab==='helena' && (
+          <div style={{padding:0,overflowY:'auto',flex:1}}>
+            {/* Timeline */}
+            <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:12}}>Histórico de Datas</div>
+            <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:24}}>
+              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                <span style={{fontSize:16}}>✨</span>
+                <div>
+                  <div style={{fontSize:12}}>Lead criado pela Helena</div>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>{lead.created_at ? new Date(lead.created_at).toLocaleString('pt-BR') : '—'}</div>
+                </div>
+              </div>
+              {lead.assigned_at && (
+                <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <span style={{fontSize:16}}>👤</span>
+                  <div>
+                    <div style={{fontSize:12}}>Passado para {lead.vendor||'vendedor'}</div>
+                    <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(lead.assigned_at).toLocaleString('pt-BR')}</div>
+                  </div>
+                </div>
+              )}
+              {followups.map(f => (
+                <div key={f.id} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <span style={{fontSize:16}}>📝</span>
+                  <div>
+                    <div style={{fontSize:12}}>{f.content||f.nota||f.text||f.acao||'—'}</div>
+                    <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(f.created_at).toLocaleString('pt-BR')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Conversa com Helena */}
+            <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:12}}>Conversa com a Helena</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {helenaHistory.length===0 && (
+                <div style={{fontSize:12,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma conversa registrada</div>
+              )}
+              {helenaHistory.map((msg,i) => {
+                let content = msg.message || msg.content || '';
+                let isHelena = false;
+                try {
+                  const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+                  if (parsed?.type==='ai' || parsed?.role==='assistant') isHelena = true;
+                  content = parsed?.data?.content || parsed?.content || parsed?.text || content;
+                } catch {}
+                return (
+                  <div key={i} style={{display:'flex',flexDirection:'column',alignItems:isHelena?'flex-end':'flex-start'}}>
+                    <div style={{
+                      maxWidth:'80%',padding:'8px 12px',borderRadius:isHelena?'12px 12px 2px 12px':'12px 12px 12px 2px',
+                      background:isHelena?'var(--dark)':'#f0f0f0',
+                      color:isHelena?'#fff':'var(--dark)',fontSize:12,lineHeight:1.5,whiteSpace:'pre-wrap'
+                    }}>
+                      <div style={{fontSize:10,opacity:.6,marginBottom:4}}>{isHelena?'🤖 Helena':'👤 Cliente'}</div>
+                      {typeof content==='string'?content:JSON.stringify(content)}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
