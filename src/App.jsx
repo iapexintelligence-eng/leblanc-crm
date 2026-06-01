@@ -407,7 +407,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       lead_id: lead.id,
       vendedor: lead.vendor || '',
       titulo: novaTarefa.descricao,
-      prazo: novaTarefa.prazo || null,
+      prazo: novaTarefa.prazo ? new Date(novaTarefa.prazo).toISOString() : null,
       status: 'pendente'
     }).select().single();
     if (!error && data) {
