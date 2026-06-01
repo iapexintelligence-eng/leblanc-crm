@@ -1066,7 +1066,7 @@ export default function LeBlancCRM() {
     total: leads.length,
     quentes: leads.filter(l => l.temperature === "hot").length,
     pipeline: leads.filter(l => l.stage !== "perdido").length,
-    fechados: leads.filter(l => l.stage === "fechado").length,
+    fechados: leads.filter(l => l.stage === "vendidos").length,
   }), [leads]);
 
   const handleUpdate = (updated) => {
