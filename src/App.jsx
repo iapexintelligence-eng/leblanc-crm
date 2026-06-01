@@ -312,7 +312,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [followups, setFollowups] = useState([]);
   const convRef = useRef(null);
 
-  useEffect(() => { setNotes(lead?.vendor_notes || lead?.notes || ''); }, [lead?.id]);
+  useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
@@ -583,16 +583,10 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               <button
                 onClick={async () => {
                   const { error } = await supabase.schema('leblanc').from('leads')
-                    .update({ vendor_notes: notes, updated_at: new Date().toISOString() })
+                    .update({ notes, updated_at: new Date().toISOString() })
                     .eq('id', lead.id);
-                  if (error) {
-                    await supabase.schema('leblanc').from('leads')
-                      .update({ notes, updated_at: new Date().toISOString() })
-                      .eq('id', lead.id);
-                    onUpdate && onUpdate({ ...lead, notes });
-                  } else {
-                    onUpdate && onUpdate({ ...lead, vendor_notes: notes });
-                  }
+                  if (!error) onUpdate && onUpdate({ ...lead, notes });
+                  else { console.error('Erro ao salvar:', error); alert('Erro ao salvar. Tente de novo.'); }
                 }}
                 style={{
                   marginTop:8, padding:'7px 18px', background:'var(--dark)', color:'#fff',
