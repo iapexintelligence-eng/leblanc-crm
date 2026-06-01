@@ -828,7 +828,7 @@ function Reports({ leads }) {
 
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
-    const fechados = vLeads.filter(l => l.stage === "fechado").length;
+    const fechados = vLeads.filter(l => l.stage === "vendidos").length;
     const perdidos = vLeads.filter(l => l.stage === "perdido").length;
     const ativos = vLeads.filter(l => PIPELINE_STAGES.includes(l.stage)).length;
     const taxa = vLeads.length ? Math.round((fechados / vLeads.length) * 100) : 0;
@@ -837,9 +837,9 @@ function Reports({ leads }) {
 
   const maxLeads = Math.max(...vendorStats.map(v => v.total), 1);
 
-  const totalFechados = leads.filter(l => l.stage === "fechado").length;
+  const totalFechados = leads.filter(l => l.stage === "vendidos").length;
   const totalPerdidos = leads.filter(l => l.stage === "perdido").length;
-  const totalSemContato = leads.filter(l => l.stage === "sem_contato").length;
+  const totalSemContato = leads.filter(l => l.stage === "sem_resposta").length;
   const totalAtivos = leads.filter(l => PIPELINE_STAGES.includes(l.stage)).length;
 
   const regionStats = useMemo(() => {
