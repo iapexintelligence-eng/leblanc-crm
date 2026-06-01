@@ -310,17 +310,18 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [helenaChats, setHelenaChats] = useState([]);
   const [helenaHistory, setHelenaHistory] = useState([]);
   const [followups, setFollowups] = useState([]);
+  const [timeline, setTimeline] = useState([]);
   const convRef = useRef(null);
 
   useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
-    setConversas([]); setTarefas([]); setArquivos([]); setHelenaChats([]); setHelenaHistory([]); setFollowups([]);
+    setConversas([]); setTarefas([]); setArquivos([]); setHelenaChats([]); setHelenaHistory([]); setFollowups([]); setTimeline([]);
     if (tab === 'conversa') loadConversas();
     if (tab === 'tarefas') loadTarefas();
     if (tab === 'arquivos') loadArquivos();
-    if (tab === 'historico') loadHelena();
+    if (tab === 'historico') loadTimeline();
     if (tab === 'helena') fetchHelenaHistory(lead);
   }, [lead?.id, tab]);
 
@@ -380,6 +381,39 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
     const { data } = await supabase.from('leblanc_sdr_chats')
       .select('*').eq('session_id', phone).order('id',{ascending:true});
     setHelenaChats(data||[]);
+  }
+
+  async function loadTimeline() {
+    const { data: convs } = await supabase
+      .from('leblanc_conversas')
+      .select('de, created_at')
+      .or(`lead_id.eq.${lead.id},telefone_cliente.eq.${lead.phone}`)
+      .order('created_at', { ascending: true });
+    const { data: tasks } = await supabase
+      .from('leblanc_tarefas')
+      .select('titulo, status, prazo, created_at')
+      .eq('lead_id', lead.id);
+    const { data: etapas } = await supabase
+      .from('leblanc_historico_eventos')
+      .select('acao, icone, created_at')
+      .eq('lead_id', lead.id);
+
+    const eventos = [];
+    if (lead.created_at) eventos.push({ icone:'✨', texto:'Lead criado pela Helena', data: lead.created_at });
+    if (lead.assigned_at) eventos.push({ icone:'👤', texto:`Passado para ${lead.vendor||'vendedor'}`, data: lead.assigned_at });
+    if (convs?.length) {
+      eventos.push({ icone:'💬', texto:'Primeira mensagem trocada', data: convs[0].created_at });
+      const ult = convs[convs.length-1];
+      eventos.push({ icone:'💬', texto:`Última mensagem (${ult.de === 'cliente' ? 'cliente' : 'vendedor'})`, data: ult.created_at });
+    }
+    (tasks||[]).forEach(t => {
+      eventos.push({ icone:'📞', texto:`Tarefa: ${t.titulo}`, data: t.created_at });
+      if (t.status === 'concluida') eventos.push({ icone:'✅', texto:`Tarefa concluída: ${t.titulo}`, data: t.prazo || t.created_at });
+    });
+    (etapas||[]).forEach(e => eventos.push({ icone: e.icone || '🔄', texto: e.acao, data: e.created_at }));
+
+    eventos.sort((a,b) => new Date(b.data) - new Date(a.data));
+    setTimeline(eventos);
   }
 
   async function enviarMensagem() {
@@ -771,37 +805,19 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
         {/* ── HISTÓRICO ── */}
         {tab==='historico' && (
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:4}}>Linha do tempo</div>
-            <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-              <span style={{fontSize:16}}>✨</span>
-              <div>
-                <div style={{fontSize:12}}>Lead criado pela Helena</div>
-                <div style={{fontSize:11,color:'var(--muted)'}}>{lead.created_at ? new Date(lead.created_at).toLocaleString('pt-BR') : '—'}</div>
-              </div>
-            </div>
-            {lead.assigned_at && (
-              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                <span style={{fontSize:16}}>👤</span>
+            {timeline.length === 0 ? (
+              <div style={{textAlign:'center',color:'#666',fontSize:12,padding:20}}>Sem eventos registrados</div>
+            ) : timeline.map((ev, i) => (
+              <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                <span style={{fontSize:16}}>{ev.icone}</span>
                 <div>
-                  <div style={{fontSize:12}}>Passado para {lead.vendor||'vendedor'}</div>
-                  <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(lead.assigned_at).toLocaleString('pt-BR')}</div>
+                  <div style={{fontSize:12}}>{ev.texto}</div>
+                  <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(ev.data).toLocaleString('pt-BR')}</div>
                 </div>
               </div>
-            )}
-            {followups.length > 0 ? followups.map(f => (
-              <div key={f.id} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                <span style={{fontSize:16}}>📝</span>
-                <div>
-                  <div style={{fontSize:12}}>{f.content||f.nota||f.text||f.acao||'—'}</div>
-                  <div style={{fontSize:11,color:'var(--muted)'}}>{new Date(f.created_at).toLocaleString('pt-BR')}</div>
-                </div>
-              </div>
-            )) : (
-              <div style={{textAlign:'center',color:'#666',fontSize:'12px',padding:'20px'}}>
-                Histórico de eventos em breve
-              </div>
-            )}
+            ))}
           </div>
         )}
 
@@ -1259,6 +1275,13 @@ export default function LeBlancCRM() {
                         onDrop={async()=>{
                           if(!dragging) return;
                           await supabase.schema('leblanc').from('leads').update({stage:stage.id,updated_at:new Date().toISOString()}).eq('id',dragging);
+                          const labelDestino = STAGES.find(s => s.id === stage.id)?.label || stage.id;
+                          await supabase.from('leblanc_historico_eventos').insert({
+                            lead_id: dragging,
+                            tipo: 'mudanca_etapa',
+                            acao: `Movido para "${labelDestino}"`,
+                            icone: '🔄'
+                          });
                           setLeads(p=>p.map(l=>l.id===dragging?{...l,stage:stage.id}:l));
                           setDragging(null);
                         }}>
