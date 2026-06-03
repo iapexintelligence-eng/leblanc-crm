@@ -1073,6 +1073,9 @@ function Reports({ leads, isGerente }) {
   const totalConvertido = vendorValores.reduce((s,v)=>s+v.convertido,0);
   const brl = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 
+  const minhaCarteira = leads.filter(l => PIPELINE_STAGES.includes(l.stage)).reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
+  const meuConvertido = leads.filter(l => l.stage === 'vendidos').reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
+
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
     const fechados = vLeads.filter(l => l.stage === "vendidos").length;
@@ -1253,6 +1256,21 @@ function Reports({ leads, isGerente }) {
                 </div>
               );
             })()}
+          </div>
+        )}
+        {!isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Minha carteira × convertido</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div style={{border:'1px solid var(--border)',borderRadius:8,padding:14,textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:600,color:'var(--dark)'}}>{brl(minhaCarteira)}</div>
+                <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Em carteira</div>
+              </div>
+              <div style={{border:'1px solid var(--border)',borderRadius:8,padding:14,textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:600,color:'#2e7d32'}}>{brl(meuConvertido)}</div>
+                <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Convertido</div>
+              </div>
+            </div>
           </div>
         )}
         <div className="report-card full">
