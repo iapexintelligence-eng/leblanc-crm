@@ -969,7 +969,7 @@ function Reports({ leads, isGerente }) {
     (async () => {
       const { data } = await supabase
         .from('leblanc_agendamentos')
-        .select('lead_id, vendor, tipo, status');
+        .select('lead_id, vendor, tipo, status, data_hora');
       setAgs(data || []);
     })();
   }, [isGerente]);
@@ -993,6 +993,20 @@ function Reports({ leads, isGerente }) {
     const mediaAps = arr.length ? (arr.reduce((x,y)=>x+y,0) / arr.length).toFixed(1) : '—';
     return { byStatus, total, comparecimento, cancelamento, mediaAps };
   }, [ags, leads]);
+
+  const metaSemanal = useMemo(() => {
+    const META = 4;
+    const hoje = new Date();
+    const dow = (hoje.getDay() + 6) % 7;
+    const inicioSemana = new Date(hoje);
+    inicioSemana.setHours(0,0,0,0);
+    inicioSemana.setDate(hoje.getDate() - dow);
+    const ehNovo = a => !['apresentacao_2','apresentacao_3'].includes(a.tipo) && a.status !== 'cancelado';
+    return VENDORS.map(v => {
+      const novos = ags.filter(a => a.vendor === v && ehNovo(a) && a.data_hora && new Date(a.data_hora) >= inicioSemana).length;
+      return { name: v, novos, meta: META, bateu: novos >= META };
+    }).sort((a,b) => b.novos - a.novos);
+  }, [ags]);
 
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
@@ -1091,6 +1105,35 @@ function Reports({ leads, isGerente }) {
                   <div>Apresentações até fechar (média): <b style={{color:'var(--dark)'}}>{funil.mediaAps}</b></div>
                 </div>
               </>
+            )}
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Meta semanal — novos agendamentos (4/semana)</div>
+            {metaSemanal.every(m => m.novos === 0) ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem novos agendamentos nesta semana ainda</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column'}}>
+                {metaSemanal.map(m => {
+                  const cor = m.bateu ? '#2e7d32' : (m.novos >= m.meta/2 ? '#e65100' : '#c0392b');
+                  return (
+                    <div key={m.name} className="vendor-row" style={{gap:10}}>
+                      <div className="vendor-av">{VENDOR_MAP[m.name]?.initials || m.name.slice(0,2)}</div>
+                      <div style={{flex:1}}>
+                        <div className="vendor-name">{m.name}</div>
+                        <div className="bar-wrap" style={{marginTop:4}}>
+                          <div className="bar-fill" style={{width:`${Math.min(m.novos/m.meta,1)*100}%`,background:cor}}/>
+                        </div>
+                      </div>
+                      <div style={{textAlign:'right',minWidth:54}}>
+                        <div style={{fontSize:15,fontWeight:600,color:cor}}>{m.novos}/{m.meta}</div>
+                        <div style={{fontSize:9,color:'var(--muted)'}}>{m.bateu ? 'meta batida' : 'na semana'}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
