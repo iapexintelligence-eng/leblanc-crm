@@ -851,7 +851,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             {agendamentos.length===0 && <div style={{color:'var(--muted)',fontSize:12,marginBottom:14}}>Nenhum agendamento ainda</div>}
             {agendamentos.map(a => {
               const cor = { agendado:'#1565c0', apresentado:'#2e7d32', cancelado:'#c0392b', remarcado:'#e65100', fechado:'#000' }[a.status] || '#555';
-              const tipoLabel = { visita:'Visita', apresentacao:'Apresentação', reuniao:'Reunião', online:'Online' }[a.tipo] || a.tipo;
+              const tipoLabel = { visita:'Visita', apresentacao:'Apresentação', online:'Apresentação Online', reuniao:'Reunião', retorno:'Retorno', apresentacao_1:'1ª Apresentação', apresentacao_2:'2ª Apresentação', apresentacao_3:'3ª Apresentação', apresentacao_online:'Apresentação Online' }[a.tipo] || a.tipo;
               return (
                 <div key={a.id} style={{padding:'10px 12px',background:'var(--bg2)',borderRadius:6,marginBottom:6}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
@@ -863,8 +863,8 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                     </div>
                     <select value={a.status} onChange={e=>mudarStatusAg(a.id, e.target.value)}
                       style={{fontSize:11,fontWeight:600,color:cor,border:'1px solid '+cor+'33',borderRadius:10,padding:'3px 8px',background:'#fff',cursor:'pointer'}}>
-                      {['agendado','apresentado','cancelado','remarcado','fechado'].map(s=>(
-                        <option key={s} value={s}>{s}</option>
+                      {[['agendado','Agendado'],['apresentado','Apresentado'],['cancelado','Cancelado'],['remarcado','Remarcado'],['fechado','Fechado']].map(([s,lbl])=>(
+                        <option key={s} value={s}>{lbl}</option>
                       ))}
                     </select>
                   </div>
@@ -877,9 +877,12 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 <select value={novoAg.tipo} onChange={e=>setNovoAg(p=>({...p,tipo:e.target.value}))}
                   style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:12,boxSizing:'border-box'}}>
                   <option value="visita">Visita</option>
-                  <option value="apresentacao">Apresentação</option>
+                  <option value="apresentacao_1">1ª Apresentação</option>
+                  <option value="apresentacao_2">2ª Apresentação</option>
+                  <option value="apresentacao_3">3ª Apresentação</option>
+                  <option value="apresentacao_online">Apresentação Online</option>
                   <option value="reuniao">Reunião</option>
-                  <option value="online">Online</option>
+                  <option value="retorno">Retorno</option>
                 </select>
               </div>
               <div style={{display:'flex',gap:6}}>
