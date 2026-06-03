@@ -18,11 +18,11 @@ const STAGES = [
 ];
 
 const VENDOR_MAP = {
-  Tayne:   { initials: "TA" },
-  Murilo:  { initials: "MU" },
-  Nicolle: { initials: "NI" },
-  Bruna:   { initials: "BR" },
-  Andre:   { initials: "AN" },
+  Tayne:    { initials: "TA" },
+  Murilo:   { initials: "MU" },
+  Andriely: { initials: "AN" },
+  Bruna:    { initials: "BR" },
+  Leticia:  { initials: "LE" },
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
@@ -307,6 +307,9 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [enviando, setEnviando] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
   const [notes, setNotes] = useState('');
+  const [observacoes, setObservacoes] = useState([]);
+  const [novaObs, setNovaObs] = useState('');
+  const [salvandoObs, setSalvandoObs] = useState(false);
   const [helenaChats, setHelenaChats] = useState([]);
   const [helenaHistory, setHelenaHistory] = useState([]);
   const [followups, setFollowups] = useState([]);
@@ -314,6 +317,8 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const convRef = useRef(null);
 
   useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
+
+  useEffect(() => { if (lead?.id) loadObservacoes(); }, [lead?.id]);
 
   useEffect(() => {
     if (!lead) return;
@@ -414,6 +419,26 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
     eventos.sort((a,b) => new Date(b.data) - new Date(a.data));
     setTimeline(eventos);
+  }
+
+  async function loadObservacoes() {
+    const { data, error } = await supabase
+      .from('leblanc_observacoes')
+      .select('id, texto, autor, created_at')
+      .eq('lead_id', lead.id)
+      .order('created_at', { ascending: false });
+    if (!error) setObservacoes(data || []);
+  }
+  async function salvarObservacao() {
+    const texto = novaObs.trim();
+    if (!texto) return;
+    setSalvandoObs(true);
+    const { error } = await supabase
+      .from('leblanc_observacoes')
+      .insert({ lead_id: lead.id, texto, autor: lead.vendor || 'vendedor' });
+    setSalvandoObs(false);
+    if (!error) { setNovaObs(''); loadObservacoes(); }
+    else { console.error('Erro ao salvar observação:', error); alert('Erro ao salvar. Tente de novo.'); }
   }
 
   async function enviarMensagem() {
@@ -567,7 +592,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                   }}
                   style={{width:'100%',border:'none',background:'transparent',fontSize:13,fontWeight:500,cursor:'pointer',padding:0}}>
                   <option value="">Sem vendedor</option>
-                  {['Tayne','Murilo','Nicolle','Bruna','André'].map(v=>(
+                  {['Tayne','Murilo','Andriely','Bruna','Leticia'].map(v=>(
                     <option key={v} value={v}>{v}</option>
                   ))}
                 </select>
@@ -603,10 +628,22 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
             </>)}
             <div style={{marginTop:16}}>
               <div style={S.sectionTitle}>OBSERVAÇÕES DO VENDEDOR</div>
+
+              {observacoes.length > 0 && (
+                <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}>
+                  {observacoes.map(o => (
+                    <div key={o.id} style={{border:'1px solid var(--border)',borderRadius:6,padding:'8px 12px',background:'#fafafa'}}>
+                      <div style={{fontSize:13,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{o.texto}</div>
+                      <div style={{fontSize:11,color:'var(--muted)',marginTop:6}}>{o.autor || 'vendedor'} · {new Date(o.created_at).toLocaleString('pt-BR')}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Anotações internas, observações sobre o cliente, próximos passos..."
+                value={novaObs}
+                onChange={e => setNovaObs(e.target.value)}
+                placeholder="Escreva uma nova observação..."
                 rows={4}
                 style={{
                   width:'100%', padding:'10px 12px', border:'1px solid var(--border)',
@@ -615,18 +652,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 }}
               />
               <button
-                onClick={async () => {
-                  const { error } = await supabase.schema('leblanc').from('leads')
-                    .update({ notes, updated_at: new Date().toISOString() })
-                    .eq('id', lead.id);
-                  if (!error) onUpdate && onUpdate({ ...lead, notes });
-                  else { console.error('Erro ao salvar:', error); alert('Erro ao salvar. Tente de novo.'); }
-                }}
+                onClick={salvarObservacao}
+                disabled={salvandoObs || !novaObs.trim()}
                 style={{
                   marginTop:8, padding:'7px 18px', background:'var(--dark)', color:'#fff',
-                  border:'none', borderRadius:6, fontSize:12, cursor:'pointer', float:'right'
+                  border:'none', borderRadius:6, fontSize:12, cursor:'pointer', float:'right',
+                  opacity:(salvandoObs || !novaObs.trim())?0.5:1
                 }}>
-                Salvar observação
+                {salvandoObs ? 'Salvando...' : 'Salvar observação'}
               </button>
               <div style={{clear:'both'}}/>
             </div>
