@@ -984,7 +984,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   );
 }
 
-function Reports({ leads, isGerente }) {
+function Reports({ leads, isGerente, vendorName }) {
   const VENDORS = Object.keys(VENDOR_MAP);
 
   const [parados, setParados] = useState([]);
@@ -1002,14 +1002,13 @@ function Reports({ leads, isGerente }) {
 
   const [ags, setAgs] = useState([]);
   useEffect(() => {
-    if (!isGerente) return;
     (async () => {
-      const { data } = await supabase
-        .from('leblanc_agendamentos')
-        .select('lead_id, vendor, tipo, status, data_hora');
+      let q = supabase.from('leblanc_agendamentos').select('lead_id, vendor, tipo, status, data_hora');
+      if (!isGerente && vendorName) q = q.eq('vendor', vendorName);
+      const { data } = await q;
       setAgs(data || []);
     })();
-  }, [isGerente]);
+  }, [isGerente, vendorName]);
 
   const funil = useMemo(() => {
     const byStatus = { agendado:0, apresentado:0, cancelado:0, remarcado:0, fechado:0 };
@@ -1270,6 +1269,36 @@ function Reports({ leads, isGerente }) {
                 <div style={{fontSize:18,fontWeight:600,color:'#2e7d32'}}>{brl(meuConvertido)}</div>
                 <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Convertido</div>
               </div>
+            </div>
+          </div>
+        )}
+        {!isGerente && (() => {
+          const m = metaSemanal.find(x => x.name === vendorName);
+          if (!m) return null;
+          const cor = m.bateu ? '#2e7d32' : (m.noRitmo ? '#1565c0' : '#c0392b');
+          return (
+            <div className="report-card full">
+              <div className="report-title">Minha meta de agendamentos (16/mês)</div>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{flex:1}}><div className="bar-wrap"><div className="bar-fill" style={{width:`${Math.min(m.novos/m.meta,1)*100}%`,background:cor}}/></div></div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:18,fontWeight:600,color:cor}}>{m.novos}/{m.meta}</div>
+                  <div style={{fontSize:10,color:cor}}>{m.bateu ? 'meta batida' : (m.noRitmo ? 'no ritmo' : 'atrasado')}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        {!isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Meus agendamentos</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {[['agendado','Agendados','#1565c0'],['apresentado','Apresentados','#2e7d32'],['remarcado','Remarcados','#e65100'],['cancelado','Cancelados','#c0392b'],['fechado','Fechados','#000']].map(([k,lbl,c])=>(
+                <div key={k} style={{flex:'1 1 80px',textAlign:'center',padding:'8px 4px',background:'var(--bg2)',borderRadius:6}}>
+                  <div style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</div>
+                  <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1553,7 +1582,7 @@ export default function LeBlancCRM() {
           </div>
 
           {activePage === "reports" ? (
-            <Reports leads={leads} isGerente={isGerente}/>
+            <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name}/>
           ) : (
             <>
               <div className="filters">
