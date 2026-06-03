@@ -866,8 +866,21 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   );
 }
 
-function Reports({ leads }) {
+function Reports({ leads, isGerente }) {
   const VENDORS = Object.keys(VENDOR_MAP);
+
+  const [parados, setParados] = useState([]);
+  const [limiteDias, setLimiteDias] = useState(7);
+  useEffect(() => {
+    if (!isGerente) return;
+    (async () => {
+      const { data } = await supabase
+        .from('leblanc_leads_parados')
+        .select('id, name, vendor, stage, dias_parado')
+        .order('dias_parado', { ascending: false });
+      setParados(data || []);
+    })();
+  }, [isGerente]);
 
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
@@ -909,6 +922,42 @@ function Reports({ leads }) {
   return (
     <div className="reports-wrap">
       <div className="reports-grid">
+        {isGerente && (
+          <div className="report-card full">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div className="report-title" style={{marginBottom:0}}>⚠️ Leads parados — sem movimentação</div>
+              <div style={{display:'flex',gap:6}}>
+                {[3,7,14].map(d => (
+                  <button key={d} onClick={()=>setLimiteDias(d)}
+                    style={{fontSize:10,padding:'3px 9px',borderRadius:20,cursor:'pointer',
+                      border:'1px solid var(--border)',
+                      background: limiteDias===d ? 'var(--dark)' : 'transparent',
+                      color: limiteDias===d ? '#fff' : 'var(--muted)'}}>+{d}d</button>
+                ))}
+              </div>
+            </div>
+            {parados.filter(p => p.dias_parado >= limiteDias).length === 0 ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Nenhum lead parado há {limiteDias}+ dias 🎉</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column'}}>
+                {parados.filter(p => p.dias_parado >= limiteDias).map(p => (
+                  <div key={p.id} className="vendor-row" style={{gap:10}}>
+                    <div style={{flex:1}}>
+                      <div className="vendor-name">{p.name}</div>
+                      <div style={{fontSize:10,color:'var(--muted)',marginTop:2}}>
+                        {p.vendor || 'sem vendedor'} · {STAGES.find(s=>s.id===p.stage)?.label || p.stage}
+                      </div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:16,fontWeight:600,color: p.dias_parado>=14 ? '#c0392b' : 'var(--dark)'}}>{p.dias_parado}d</div>
+                      <div style={{fontSize:9,color:'var(--muted)'}}>parado</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="report-card full">
           <div className="report-title">Leads por vendedor — taxa de conversão</div>
           {vendorStats.map(v => (
@@ -1189,7 +1238,7 @@ export default function LeBlancCRM() {
           </div>
 
           {activePage === "reports" ? (
-            <Reports leads={leads}/>
+            <Reports leads={leads} isGerente={isGerente}/>
           ) : (
             <>
               <div className="filters">
