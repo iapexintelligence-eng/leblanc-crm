@@ -303,6 +303,8 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   const [vendorConversas, setVendorConversas] = useState([]);
   const [tarefas, setTarefas] = useState([]);
   const [arquivos, setArquivos] = useState([]);
+  const [agendamentos, setAgendamentos] = useState([]);
+  const [novoAg, setNovoAg] = useState({ data_hora: '', tipo: 'visita' });
   const [msg, setMsg] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [novaTarefa, setNovaTarefa] = useState({ descricao: '', prazo: '', tipo: 'ligacao' });
@@ -322,9 +324,10 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
 
   useEffect(() => {
     if (!lead) return;
-    setConversas([]); setTarefas([]); setArquivos([]); setHelenaChats([]); setHelenaHistory([]); setFollowups([]); setTimeline([]);
+    setConversas([]); setTarefas([]); setArquivos([]); setHelenaChats([]); setHelenaHistory([]); setFollowups([]); setTimeline([]); setAgendamentos([]);
     if (tab === 'conversa') loadConversas();
     if (tab === 'tarefas') loadTarefas();
+    if (tab === 'agendamentos') loadAgendamentos();
     if (tab === 'arquivos') loadArquivos();
     if (tab === 'historico') loadTimeline();
     if (tab === 'helena') fetchHelenaHistory(lead);
@@ -346,6 +349,30 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
       .from('leblanc_tarefas').select('*')
       .eq('lead_id', lead.id).order('prazo', { ascending: true });
     setTarefas(data || []);
+  }
+
+  async function loadAgendamentos() {
+    const { data } = await supabase
+      .from('leblanc_agendamentos').select('*')
+      .eq('lead_id', lead.id).order('data_hora', { ascending: false });
+    setAgendamentos(data || []);
+  }
+  async function criarAgendamento() {
+    if (!novoAg.data_hora) return;
+    const { error } = await supabase
+      .from('leblanc_agendamentos')
+      .insert({ lead_id: lead.id, vendor: lead.vendor || null,
+        data_hora: new Date(novoAg.data_hora).toISOString(),
+        tipo: novoAg.tipo, status: 'agendado' });
+    if (!error) { setNovoAg({ data_hora: '', tipo: 'visita' }); loadAgendamentos(); }
+    else { console.error('Erro ao criar agendamento:', error); alert('Erro ao criar. Tente de novo.'); }
+  }
+  async function mudarStatusAg(id, status) {
+    const { error } = await supabase
+      .from('leblanc_agendamentos')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) loadAgendamentos();
   }
 
   async function loadArquivos() {
@@ -504,6 +531,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
     { id:'helena', label:'Helena' },
     { id:'conversa', label:'Conversa' },
     { id:'tarefas', label:'Tarefas' },
+    { id:'agendamentos', label:'Agendamentos' },
     { id:'arquivos', label:'Arquivos' },
     { id:'historico', label:'Histórico' },
   ];
@@ -810,6 +838,56 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 <button onClick={adicionarTarefa}
                   style={{padding:'6px 14px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:4,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
                   + Adicionar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── AGENDAMENTOS ── */}
+        {tab==='agendamentos' && (
+          <div>
+            <div style={S.sectionTitle}>AGENDAMENTOS</div>
+            {agendamentos.length===0 && <div style={{color:'var(--muted)',fontSize:12,marginBottom:14}}>Nenhum agendamento ainda</div>}
+            {agendamentos.map(a => {
+              const cor = { agendado:'#1565c0', apresentado:'#2e7d32', cancelado:'#c0392b', remarcado:'#e65100', fechado:'#000' }[a.status] || '#555';
+              const tipoLabel = { visita:'Visita', apresentacao:'Apresentação', reuniao:'Reunião', online:'Online' }[a.tipo] || a.tipo;
+              return (
+                <div key={a.id} style={{padding:'10px 12px',background:'var(--bg2)',borderRadius:6,marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:500}}>{tipoLabel}</div>
+                      <div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>
+                        📅 {new Date(a.data_hora).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                      </div>
+                    </div>
+                    <select value={a.status} onChange={e=>mudarStatusAg(a.id, e.target.value)}
+                      style={{fontSize:11,fontWeight:600,color:cor,border:'1px solid '+cor+'33',borderRadius:10,padding:'3px 8px',background:'#fff',cursor:'pointer'}}>
+                      {['agendado','apresentado','cancelado','remarcado','fechado'].map(s=>(
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{marginTop:14,padding:'12px',background:'var(--bg2)',borderRadius:6}}>
+              <div style={{...S.sectionTitle,marginBottom:8}}>NOVO AGENDAMENTO</div>
+              <div style={{marginBottom:6}}>
+                <select value={novoAg.tipo} onChange={e=>setNovoAg(p=>({...p,tipo:e.target.value}))}
+                  style={{width:'100%',padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:12,boxSizing:'border-box'}}>
+                  <option value="visita">Visita</option>
+                  <option value="apresentacao">Apresentação</option>
+                  <option value="reuniao">Reunião</option>
+                  <option value="online">Online</option>
+                </select>
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <input type="datetime-local" value={novoAg.data_hora} onChange={e=>setNovoAg(p=>({...p,data_hora:e.target.value}))}
+                  style={{flex:1,padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:11}}/>
+                <button onClick={criarAgendamento}
+                  style={{padding:'6px 14px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:4,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  + Agendar
                 </button>
               </div>
             </div>
