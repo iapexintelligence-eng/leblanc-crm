@@ -963,6 +963,37 @@ function Reports({ leads, isGerente }) {
     })();
   }, [isGerente]);
 
+  const [ags, setAgs] = useState([]);
+  useEffect(() => {
+    if (!isGerente) return;
+    (async () => {
+      const { data } = await supabase
+        .from('leblanc_agendamentos')
+        .select('lead_id, vendor, tipo, status');
+      setAgs(data || []);
+    })();
+  }, [isGerente]);
+
+  const funil = useMemo(() => {
+    const byStatus = { agendado:0, apresentado:0, cancelado:0, remarcado:0, fechado:0 };
+    ags.forEach(a => { if (byStatus[a.status] !== undefined) byStatus[a.status]++; });
+    const total = ags.length;
+    const realizados = byStatus.apresentado + byStatus.fechado;
+    const comDesfecho = byStatus.apresentado + byStatus.cancelado + byStatus.remarcado + byStatus.fechado;
+    const comparecimento = comDesfecho ? Math.round((realizados / comDesfecho) * 100) : 0;
+    const cancelamento = total ? Math.round((byStatus.cancelado / total) * 100) : 0;
+    const vendidosIds = new Set(leads.filter(l => l.stage === 'vendidos').map(l => l.id));
+    const apsPorLead = {};
+    ags.forEach(a => {
+      if (vendidosIds.has(a.lead_id) && String(a.tipo).startsWith('apresentacao')) {
+        apsPorLead[a.lead_id] = (apsPorLead[a.lead_id] || 0) + 1;
+      }
+    });
+    const arr = Object.values(apsPorLead);
+    const mediaAps = arr.length ? (arr.reduce((x,y)=>x+y,0) / arr.length).toFixed(1) : '—';
+    return { byStatus, total, comparecimento, cancelamento, mediaAps };
+  }, [ags, leads]);
+
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
     const fechados = vLeads.filter(l => l.stage === "vendidos").length;
@@ -1036,6 +1067,30 @@ function Reports({ leads, isGerente }) {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Funil de agendamentos</div>
+            {funil.total === 0 ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Ainda sem agendamentos registrados</div>
+            ) : (
+              <>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                  {[['agendado','Agendados','#1565c0'],['apresentado','Apresentados','#2e7d32'],['remarcado','Remarcados','#e65100'],['cancelado','Cancelados','#c0392b'],['fechado','Fechados','#000']].map(([k,lbl,c])=>(
+                    <div key={k} style={{flex:'1 1 80px',textAlign:'center',padding:'8px 4px',background:'var(--bg2)',borderRadius:6}}>
+                      <div style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:'flex',gap:16,fontSize:12,color:'var(--muted)',flexWrap:'wrap'}}>
+                  <div>Comparecimento: <b style={{color:'var(--dark)'}}>{funil.comparecimento}%</b></div>
+                  <div>Cancelamento: <b style={{color:'var(--dark)'}}>{funil.cancelamento}%</b></div>
+                  <div>Apresentações até fechar (média): <b style={{color:'var(--dark)'}}>{funil.mediaAps}</b></div>
+                </div>
+              </>
             )}
           </div>
         )}
