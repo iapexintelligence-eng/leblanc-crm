@@ -597,6 +597,26 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
         {/* ── FICHA ── */}
         {tab==='ficha' && (
           <div>
+            <div style={{marginBottom:16}}>
+              <div style={S.sectionTitle}>ETAPA NO FUNIL</div>
+              <select
+                value={lead.stage || ''}
+                onChange={async (e) => {
+                  const novoStage = e.target.value;
+                  if (novoStage === lead.stage) return;
+                  await supabase.schema('leblanc').from('leads')
+                    .update({ stage: novoStage, updated_at: new Date().toISOString() })
+                    .eq('id', lead.id);
+                  const labelDestino = STAGES.find(s => s.id === novoStage)?.label || novoStage;
+                  await supabase.from('leblanc_historico_eventos').insert({
+                    lead_id: lead.id, tipo: 'mudanca_etapa', acao: `Movido para "${labelDestino}"`, icone: '🔄'
+                  });
+                  onUpdate && onUpdate({ ...lead, stage: novoStage });
+                }}
+                style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,fontWeight:500,background:'#fff',cursor:'pointer'}}>
+                {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
             <div style={S.sectionTitle}>FICHA DO CLIENTE</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
               <div style={S.infoBox}><div style={S.infoLabel}>Telefone</div><div style={S.infoVal}>{lead.phone}</div></div>
@@ -625,6 +645,23 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                   ))}
                 </select>
               </div>
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:6}}>Estimativa de investimento — preencher após o briefing (R$)</div>
+              <input
+                type="number"
+                key={lead.id}
+                defaultValue={lead.valor_estimado || ''}
+                placeholder="Valor que o cliente pretende investir, ex.: 100000"
+                onBlur={async (e) => {
+                  const valor = e.target.value === '' ? null : Number(e.target.value);
+                  await supabase.schema('leblanc').from('leads')
+                    .update({ valor_estimado: valor, updated_at: new Date().toISOString() })
+                    .eq('id', lead.id);
+                  onUpdate && onUpdate({ ...lead, valor_estimado: valor });
+                }}
+                style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,boxSizing:'border-box'}}
+              />
             </div>
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:6}}>Temperatura</div>
@@ -995,18 +1032,46 @@ function Reports({ leads, isGerente }) {
   }, [ags, leads]);
 
   const metaSemanal = useMemo(() => {
-    const META = 4;
+    const META = 16;
     const hoje = new Date();
-    const dow = (hoje.getDay() + 6) % 7;
-    const inicioSemana = new Date(hoje);
-    inicioSemana.setHours(0,0,0,0);
-    inicioSemana.setDate(hoje.getDate() - dow);
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1, 0, 0, 0, 0);
+    const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1, 0, 0, 0, 0);
+    const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+    const esperado = META * (hoje.getDate() / diasNoMes);
     const ehNovo = a => !['apresentacao_2','apresentacao_3'].includes(a.tipo) && a.status !== 'cancelado';
     return VENDORS.map(v => {
-      const novos = ags.filter(a => a.vendor === v && ehNovo(a) && a.data_hora && new Date(a.data_hora) >= inicioSemana).length;
-      return { name: v, novos, meta: META, bateu: novos >= META };
+      const novos = ags.filter(a => {
+        if (a.vendor !== v || !ehNovo(a) || !a.data_hora) return false;
+        const d = new Date(a.data_hora);
+        return d >= inicioMes && d < inicioProxMes;
+      }).length;
+      return { name: v, novos, meta: META, bateu: novos >= META, esperado: Math.round(esperado), noRitmo: novos >= esperado };
     }).sort((a,b) => b.novos - a.novos);
   }, [ags]);
+
+  const [perdidos, setPerdidos] = useState([]);
+  const [fVendPerd, setFVendPerd] = useState('todos');
+  useEffect(() => {
+    if (!isGerente) return;
+    (async () => {
+      const { data } = await supabase
+        .from('leblanc_perdidos')
+        .select('id, name, vendor, notes, ultima_obs, obs_data');
+      setPerdidos(data || []);
+    })();
+  }, [isGerente]);
+
+  const vendorValores = useMemo(() => {
+    return VENDORS.map(v => {
+      const vLeads = leads.filter(l => l.vendor === v);
+      const carteira = vLeads.filter(l => PIPELINE_STAGES.includes(l.stage)).reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
+      const convertido = vLeads.filter(l => l.stage === 'vendidos').reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
+      return { name: v, carteira, convertido };
+    }).sort((a,b)=> b.carteira - a.carteira);
+  }, [leads]);
+  const totalCarteira = vendorValores.reduce((s,v)=>s+v.carteira,0);
+  const totalConvertido = vendorValores.reduce((s,v)=>s+v.convertido,0);
+  const brl = n => n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 
   const vendorStats = useMemo(() => VENDORS.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
@@ -1110,13 +1175,13 @@ function Reports({ leads, isGerente }) {
         )}
         {isGerente && (
           <div className="report-card full">
-            <div className="report-title">Meta semanal — novos agendamentos (4/semana)</div>
+            <div className="report-title">Meta mensal — novos agendamentos (16/mês)</div>
             {metaSemanal.every(m => m.novos === 0) ? (
-              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem novos agendamentos nesta semana ainda</div>
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem novos agendamentos neste mês ainda</div>
             ) : (
               <div style={{display:'flex',flexDirection:'column'}}>
                 {metaSemanal.map(m => {
-                  const cor = m.bateu ? '#2e7d32' : (m.novos >= m.meta/2 ? '#e65100' : '#c0392b');
+                  const cor = m.bateu ? '#2e7d32' : (m.noRitmo ? '#1565c0' : '#c0392b');
                   return (
                     <div key={m.name} className="vendor-row" style={{gap:10}}>
                       <div className="vendor-av">{VENDOR_MAP[m.name]?.initials || m.name.slice(0,2)}</div>
@@ -1126,15 +1191,68 @@ function Reports({ leads, isGerente }) {
                           <div className="bar-fill" style={{width:`${Math.min(m.novos/m.meta,1)*100}%`,background:cor}}/>
                         </div>
                       </div>
-                      <div style={{textAlign:'right',minWidth:54}}>
+                      <div style={{textAlign:'right',minWidth:64}}>
                         <div style={{fontSize:15,fontWeight:600,color:cor}}>{m.novos}/{m.meta}</div>
-                        <div style={{fontSize:9,color:'var(--muted)'}}>{m.bateu ? 'meta batida' : 'na semana'}</div>
+                        <div style={{fontSize:9,color:cor}}>{m.bateu ? 'meta batida' : (m.noRitmo ? 'no ritmo' : 'atrasado')}</div>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Valor em carteira por vendedor</div>
+            <div style={{display:'flex',gap:16,marginBottom:12,fontSize:12}}>
+              <div>Carteira da loja: <b>{brl(totalCarteira)}</b></div>
+              <div>Convertido: <b style={{color:'#2e7d32'}}>{brl(totalConvertido)}</b></div>
+            </div>
+            {vendorValores.map(v => (
+              <div key={v.name} className="vendor-row" style={{gap:10}}>
+                <div className="vendor-av">{VENDOR_MAP[v.name]?.initials || v.name.slice(0,2)}</div>
+                <div className="vendor-name" style={{flex:1}}>{v.name}</div>
+                <div className="vendor-stats">
+                  <div className="vstat"><div className="vstat-val">{brl(v.carteira)}</div><div className="vstat-label">em carteira</div></div>
+                  <div className="vstat"><div className={`vstat-val${v.convertido>0?' green':''}`}>{brl(v.convertido)}</div><div className="vstat-label">convertido</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
+              <div className="report-title" style={{marginBottom:0}}>Leads perdidos — observações</div>
+              <select value={fVendPerd} onChange={e=>setFVendPerd(e.target.value)}
+                style={{fontSize:11,padding:'3px 8px',border:'1px solid var(--border)',borderRadius:6,background:'#fff',cursor:'pointer'}}>
+                <option value="todos">Todos os vendedores</option>
+                {VENDORS.map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            {(() => {
+              const lista = perdidos.filter(p => fVendPerd === 'todos' || p.vendor === fVendPerd);
+              if (lista.length === 0) return <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Nenhum lead perdido para este filtro</div>;
+              return (
+                <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:340,overflowY:'auto'}}>
+                  {lista.map(p => {
+                    const texto = p.ultima_obs || p.notes;
+                    return (
+                      <div key={p.id} style={{borderLeft:'3px solid #c0392b',padding:'6px 10px',background:'var(--bg2)',borderRadius:'0 6px 6px 0'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
+                          <div style={{fontSize:13,fontWeight:500}}>{p.name}</div>
+                          <div style={{fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>{p.vendor || 'sem vendedor'}</div>
+                        </div>
+                        <div style={{fontSize:12,color:texto?'var(--dark)':'var(--faint)',marginTop:3,whiteSpace:'pre-wrap'}}>
+                          {texto || 'Sem observação registrada'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
         <div className="report-card full">
