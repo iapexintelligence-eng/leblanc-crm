@@ -1003,7 +1003,7 @@ function Reports({ leads, isGerente, vendorName }) {
   const [ags, setAgs] = useState([]);
   useEffect(() => {
     (async () => {
-      let q = supabase.from('leblanc_agendamentos').select('lead_id, vendor, tipo, status, data_hora');
+      let q = supabase.from('leblanc_agendamentos').select('lead_id, lead_name, vendor, tipo, status, data_hora');
       if (!isGerente && vendorName) q = q.eq('vendor', vendorName);
       const { data } = await q;
       setAgs(data || []);
@@ -1012,7 +1012,21 @@ function Reports({ leads, isGerente, vendorName }) {
 
   const funil = useMemo(() => {
     const byStatus = { agendado:0, apresentado:0, cancelado:0, remarcado:0, fechado:0 };
-    ags.forEach(a => { if (byStatus[a.status] !== undefined) byStatus[a.status]++; });
+    const byStatusItems = { agendado:[], apresentado:[], cancelado:[], remarcado:[], fechado:[] };
+    const seen = { agendado:new Set(), apresentado:new Set(), cancelado:new Set(), remarcado:new Set(), fechado:new Set() };
+    ags.forEach(a => {
+      if (byStatus[a.status] !== undefined) byStatus[a.status]++;
+      if (byStatusItems[a.status] && a.lead_name) {
+        const key = `${a.lead_name}|${a.vendor||''}`;
+        if (!seen[a.status].has(key)) {
+          seen[a.status].add(key);
+          byStatusItems[a.status].push({ name: a.lead_name, vendor: a.vendor || '—' });
+        }
+      }
+    });
+    const byStatusEntries = Object.fromEntries(
+      Object.entries(byStatusItems).map(([k, arr]) => [k, arr.sort((a,b) => a.name.localeCompare(b.name))])
+    );
     const total = ags.length;
     const realizados = byStatus.apresentado + byStatus.fechado;
     const comDesfecho = byStatus.apresentado + byStatus.cancelado + byStatus.remarcado + byStatus.fechado;
@@ -1027,7 +1041,7 @@ function Reports({ leads, isGerente, vendorName }) {
     });
     const arr = Object.values(apsPorLead);
     const mediaAps = arr.length ? (arr.reduce((x,y)=>x+y,0) / arr.length).toFixed(1) : '—';
-    return { byStatus, total, comparecimento, cancelamento, mediaAps };
+    return { byStatus, byStatusEntries, total, comparecimento, cancelamento, mediaAps };
   }, [ags, leads]);
 
   const metaSemanal = useMemo(() => {
@@ -1237,11 +1251,26 @@ function Reports({ leads, isGerente, vendorName }) {
               <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Ainda sem agendamentos registrados</div>
             ) : (
               <>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,marginBottom:12}}>
                   {[['agendado','Agendados','#1565c0'],['apresentado','Apresentados','#2e7d32'],['remarcado','Remarcados','#e65100'],['cancelado','Cancelados','#c0392b'],['fechado','Fechados','#000']].map(([k,lbl,c])=>(
-                    <div key={k} style={{flex:'1 1 80px',textAlign:'center',padding:'8px 4px',background:'var(--bg2)',borderRadius:6}}>
-                      <div style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</div>
-                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</div>
+                    <div key={k} style={{padding:10,background:'var(--bg2)',borderRadius:6}}>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
+                        <span style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</span>
+                        <span style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</span>
+                      </div>
+                      {funil.byStatusEntries[k]?.length > 0 && (
+                        <div style={{fontSize:10,lineHeight:1.35,maxHeight:160,overflow:'auto'}}>
+                          {funil.byStatusEntries[k].slice(0,12).map(item => (
+                            <div key={`${item.name}|${item.vendor}`} style={{padding:'3px 0',borderTop:'1px dashed var(--border)'}}>
+                              <div style={{color:'var(--light)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                              <div style={{fontSize:9,color:'var(--muted)',marginTop:1}}>{item.vendor}</div>
+                            </div>
+                          ))}
+                          {funil.byStatusEntries[k].length > 12 && (
+                            <div style={{color:'var(--muted)',fontStyle:'italic',marginTop:4,fontSize:9}}>+{funil.byStatusEntries[k].length - 12} mais</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
