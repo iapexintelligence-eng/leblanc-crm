@@ -1048,6 +1048,34 @@ function Reports({ leads, isGerente, vendorName }) {
     }).sort((a,b) => b.novos - a.novos);
   }, [ags]);
 
+  const painelOperacional = useMemo(() => {
+    const hoje = new Date();
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1, 0,0,0,0);
+    const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 1, 0,0,0,0);
+    const dow = hoje.getDay();
+    const diffSeg = dow === 0 ? -6 : 1 - dow;
+    const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate()+diffSeg); inicioSemana.setHours(0,0,0,0);
+    const fimSemana = new Date(inicioSemana); fimSemana.setDate(inicioSemana.getDate()+7);
+    const semanaFimVis = new Date(fimSemana); semanaFimVis.setDate(semanaFimVis.getDate()-1);
+    const linhas = VENDORS.map(v => {
+      const ativos = leads.filter(l => l.vendor === v && !['vendidos','perdido'].includes(l.stage)).length;
+      const recebidosMes = leads.filter(l => {
+        if (l.vendor !== v || !l.created_at) return false;
+        const d = new Date(l.created_at);
+        return d >= inicioMes && d < inicioProxMes;
+      }).length;
+      const agendSemana = ags.filter(a => {
+        if (a.vendor !== v || a.status === 'cancelado' || !a.data_hora) return false;
+        const d = new Date(a.data_hora);
+        return d >= inicioSemana && d < fimSemana;
+      }).length;
+      return { name: v, ativos, recebidosMes, agendSemana };
+    }).sort((a,b) => b.ativos - a.ativos);
+    const fmtDM = d => d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+    const mesNome = hoje.toLocaleDateString('pt-BR',{month:'long'});
+    return { linhas, mesNome, semanaIni: fmtDM(inicioSemana), semanaFim: fmtDM(semanaFimVis) };
+  }, [leads, ags]);
+
   const [perdidos, setPerdidos] = useState([]);
   const [fVendPerd, setFVendPerd] = useState('todos');
   useEffect(() => {
@@ -1115,6 +1143,57 @@ function Reports({ leads, isGerente, vendorName }) {
   return (
     <div className="reports-wrap">
       <div className="reports-grid">
+        {!isGerente && vendorName && (() => {
+          const m = painelOperacional.linhas.find(p => p.name === vendorName);
+          if (!m) return null;
+          return (
+            <div className="report-card full">
+              <div className="report-title">Minha visão operacional</div>
+              <div style={{display:'flex',gap:8}}>
+                <div style={{flex:1,textAlign:'center',padding:'12px 8px',background:'var(--bg2)',borderRadius:6}}>
+                  <div style={{fontSize:26,fontWeight:600}}>{m.ativos}</div>
+                  <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Ativos</div>
+                </div>
+                <div style={{flex:1,textAlign:'center',padding:'12px 8px',background:'var(--bg2)',borderRadius:6}}>
+                  <div style={{fontSize:26,fontWeight:600}}>{m.recebidosMes}</div>
+                  <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Recebidos no mês</div>
+                </div>
+                <div style={{flex:1,textAlign:'center',padding:'12px 8px',background:'var(--bg2)',borderRadius:6}}>
+                  <div style={{fontSize:26,fontWeight:600,color: m.agendSemana >= 4 ? '#2e7d32' : (m.agendSemana >= 1 ? 'var(--dark)' : '#c0392b')}}>{m.agendSemana}</div>
+                  <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>Agend. semana</div>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:'var(--muted)',marginTop:10,textTransform:'capitalize'}}>
+                Mês: {painelOperacional.mesNome} · Semana: {painelOperacional.semanaIni} a {painelOperacional.semanaFim}
+              </div>
+            </div>
+          );
+        })()}
+        {isGerente && (
+          <div className="report-card full">
+            <div className="report-title">Painel por vendedora — visão operacional</div>
+            <div style={{display:'flex',gap:8,fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',paddingBottom:8,borderBottom:'1px solid var(--border)'}}>
+              <div style={{flex:'1.4'}}>Vendedora</div>
+              <div style={{flex:1,textAlign:'center'}}>Ativos</div>
+              <div style={{flex:1,textAlign:'center'}}>Recebidos no mês</div>
+              <div style={{flex:1,textAlign:'center'}}>Agend. semana</div>
+            </div>
+            {painelOperacional.linhas.map(p => (
+              <div key={p.name} style={{display:'flex',gap:8,alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+                <div style={{flex:'1.4',display:'flex',alignItems:'center',gap:8}}>
+                  <div className="vendor-av" style={{width:26,height:26,fontSize:10}}>{VENDOR_MAP[p.name]?.initials || p.name.slice(0,2).toUpperCase()}</div>
+                  <div style={{fontSize:12}}>{p.name}</div>
+                </div>
+                <div style={{flex:1,textAlign:'center',fontWeight:600,fontSize:16}}>{p.ativos}</div>
+                <div style={{flex:1,textAlign:'center',fontWeight:600,fontSize:16}}>{p.recebidosMes}</div>
+                <div style={{flex:1,textAlign:'center',fontWeight:600,fontSize:16,color: p.agendSemana >= 4 ? '#2e7d32' : (p.agendSemana >= 1 ? 'var(--dark)' : '#c0392b')}}>{p.agendSemana}</div>
+              </div>
+            ))}
+            <div style={{fontSize:10,color:'var(--muted)',marginTop:10,textTransform:'capitalize'}}>
+              Mês: {painelOperacional.mesNome} · Semana: {painelOperacional.semanaIni} a {painelOperacional.semanaFim}
+            </div>
+          </div>
+        )}
         {isGerente && (
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
