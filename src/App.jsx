@@ -1253,16 +1253,16 @@ function Reports({ leads, isGerente, vendorName }) {
               <>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,marginBottom:12}}>
                   {[['agendado','Agendados','#1565c0'],['apresentado','Apresentados','#2e7d32'],['remarcado','Remarcados','#e65100'],['cancelado','Cancelados','#c0392b'],['fechado','Fechados','#000']].map(([k,lbl,c])=>(
-                    <div key={k} style={{padding:10,background:'var(--bg2)',borderRadius:6}}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
-                        <span style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</span>
-                        <span style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</span>
+                    <div key={k} style={{padding:10,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                      <div style={{marginBottom:8}}>
+                        <div style={{fontSize:24,fontWeight:600,color:c,lineHeight:1.1}}>{funil.byStatus[k]}</div>
+                        <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>{lbl}</div>
                       </div>
                       {funil.byStatusEntries[k]?.length > 0 && (
                         <div style={{fontSize:10,lineHeight:1.35,maxHeight:160,overflow:'auto'}}>
                           {funil.byStatusEntries[k].slice(0,12).map(item => (
                             <div key={`${item.name}|${item.vendor}`} style={{padding:'3px 0',borderTop:'1px dashed var(--border)'}}>
-                              <div style={{color:'var(--light)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                              <div style={{color:'var(--light)'}}>{item.name}</div>
                               <div style={{fontSize:9,color:'var(--muted)',marginTop:1}}>{item.vendor}</div>
                             </div>
                           ))}
@@ -1402,15 +1402,15 @@ function Reports({ leads, isGerente, vendorName }) {
             <div className="report-title">Meus agendamentos</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
               {[['agendado','Agendados','#1565c0'],['apresentado','Apresentados','#2e7d32'],['remarcado','Remarcados','#e65100'],['cancelado','Cancelados','#c0392b'],['fechado','Fechados','#000']].map(([k,lbl,c])=>(
-                <div key={k} style={{padding:10,background:'var(--bg2)',borderRadius:6}}>
-                  <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:6}}>
-                    <span style={{fontSize:20,fontWeight:600,color:c}}>{funil.byStatus[k]}</span>
-                    <span style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em'}}>{lbl}</span>
+                <div key={k} style={{padding:10,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:24,fontWeight:600,color:c,lineHeight:1.1}}>{funil.byStatus[k]}</div>
+                    <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>{lbl}</div>
                   </div>
                   {funil.byStatusEntries[k]?.length > 0 && (
                     <div style={{fontSize:10,lineHeight:1.35,maxHeight:140,overflow:'auto'}}>
                       {funil.byStatusEntries[k].slice(0,10).map(item => (
-                        <div key={`${item.name}|${item.vendor}`} style={{padding:'3px 0',borderTop:'1px dashed var(--border)',color:'var(--light)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                        <div key={`${item.name}|${item.vendor}`} style={{padding:'3px 0',borderTop:'1px dashed var(--border)',color:'var(--light)'}}>{item.name}</div>
                       ))}
                       {funil.byStatusEntries[k].length > 10 && (
                         <div style={{color:'var(--muted)',fontStyle:'italic',marginTop:4,fontSize:9}}>+{funil.byStatusEntries[k].length - 10} mais</div>
