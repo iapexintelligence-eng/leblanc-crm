@@ -1092,6 +1092,7 @@ function Reports({ leads, isGerente, vendorName }) {
 
   const [histMensal, setHistMensal] = useState([]);
   const [fHistVend, setFHistVend] = useState('todos');
+  const [fHistMes, setFHistMes] = useState('todos');
   useEffect(() => {
     (async () => {
       if (!isGerente) return;
@@ -1225,15 +1226,26 @@ function Reports({ leads, isGerente, vendorName }) {
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
               <div className="report-title" style={{marginBottom:0}}>📊 Histórico mensal por vendedora</div>
-              <select value={fHistVend} onChange={e=>setFHistVend(e.target.value)}
-                style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}>
-                <option value="todos">Todas vendedoras</option>
-                <option value="Murilo">Murilo</option>
-                <option value="Bruna">Bruna</option>
-                <option value="Tayne">Tayne</option>
-                <option value="Leticia">Letícia</option>
-                <option value="Andriely">Andriely</option>
-              </select>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                <select value={fHistMes} onChange={e=>setFHistMes(e.target.value)}
+                  style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}>
+                  <option value="todos">Todos os meses</option>
+                  {[...new Set(histMensal.map(r => r.mes))].sort().reverse().map(m => {
+                    const d = new Date(m + 'T12:00:00');
+                    const lbl = d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+                    return <option key={m} value={m}>{lbl.charAt(0).toUpperCase()+lbl.slice(1)}</option>;
+                  })}
+                </select>
+                <select value={fHistVend} onChange={e=>setFHistVend(e.target.value)}
+                  style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}>
+                  <option value="todos">Todas vendedoras</option>
+                  <option value="Murilo">Murilo</option>
+                  <option value="Bruna">Bruna</option>
+                  <option value="Tayne">Tayne</option>
+                  <option value="Leticia">Letícia</option>
+                  <option value="Andriely">Andriely</option>
+                </select>
+              </div>
             </div>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',fontSize:11,borderCollapse:'collapse',minWidth:760}}>
@@ -1254,7 +1266,9 @@ function Reports({ leads, isGerente, vendorName }) {
                 </thead>
                 <tbody>
                   {histMensal
-                    .filter(r => r.vendor && (fHistVend === 'todos' || r.vendor === fHistVend))
+                    .filter(r => r.vendor
+                      && (fHistVend === 'todos' || r.vendor === fHistVend)
+                      && (fHistMes === 'todos' || r.mes === fHistMes))
                     .map((r,i) => {
                       const brl = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR',{maximumFractionDigits:0});
                       const mesD = new Date(r.mes + 'T12:00:00');
