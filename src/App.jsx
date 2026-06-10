@@ -1090,6 +1090,19 @@ function Reports({ leads, isGerente, vendorName }) {
     return { linhas, mesNome, semanaIni: fmtDM(inicioSemana), semanaFim: fmtDM(semanaFimVis) };
   }, [leads, ags]);
 
+  const [histMensal, setHistMensal] = useState([]);
+  const [fHistVend, setFHistVend] = useState('todos');
+  useEffect(() => {
+    (async () => {
+      if (!isGerente) return;
+      const { data } = await supabase
+        .from('leblanc_relatorio_mensal')
+        .select('*')
+        .order('mes', { ascending: false });
+      setHistMensal(data || []);
+    })();
+  }, [isGerente]);
+
   const [perdidos, setPerdidos] = useState([]);
   const [fVendPerd, setFVendPerd] = useState('todos');
   useEffect(() => {
@@ -1205,6 +1218,65 @@ function Reports({ leads, isGerente, vendorName }) {
             ))}
             <div style={{fontSize:10,color:'var(--muted)',marginTop:10,textTransform:'capitalize'}}>
               Mês: {painelOperacional.mesNome} · Semana: {painelOperacional.semanaIni} a {painelOperacional.semanaFim}
+            </div>
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+              <div className="report-title" style={{marginBottom:0}}>📊 Histórico mensal por vendedora</div>
+              <select value={fHistVend} onChange={e=>setFHistVend(e.target.value)}
+                style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}>
+                <option value="todos">Todas vendedoras</option>
+                <option value="Murilo">Murilo</option>
+                <option value="Bruna">Bruna</option>
+                <option value="Tayne">Tayne</option>
+                <option value="Leticia">Letícia</option>
+                <option value="Andriely">Andriely</option>
+              </select>
+            </div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',fontSize:11,borderCollapse:'collapse',minWidth:760}}>
+                <thead>
+                  <tr style={{color:'var(--muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'8px 6px',textAlign:'left'}}>Mês</th>
+                    <th style={{padding:'8px 6px',textAlign:'left'}}>Vendedora</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Receb.</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Ativos</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Vendidos</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Perdidos</th>
+                    <th style={{padding:'8px 6px',textAlign:'right'}}>R$ entrou</th>
+                    <th style={{padding:'8px 6px',textAlign:'right'}}>R$ ativo</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Agend.</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Cancel.</th>
+                    <th style={{padding:'8px 6px',textAlign:'center'}}>Apres.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {histMensal
+                    .filter(r => r.vendor && (fHistVend === 'todos' || r.vendor === fHistVend))
+                    .map((r,i) => {
+                      const brl = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR',{maximumFractionDigits:0});
+                      const mesD = new Date(r.mes + 'T12:00:00');
+                      const mesLabel = mesD.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}).replace('.','');
+                      return (
+                        <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                          <td style={{padding:'8px 6px',textTransform:'capitalize'}}>{mesLabel}</td>
+                          <td style={{padding:'8px 6px'}}>{r.vendor}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center',fontWeight:500}}>{r.recebidos}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center'}}>{r.ativos}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center',color:r.vendidos>0?'#2e7d32':'var(--muted)'}}>{r.vendidos}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center',color:r.perdidos>0?'#c0392b':'var(--muted)'}}>{r.perdidos}</td>
+                          <td style={{padding:'8px 6px',textAlign:'right',color:'var(--muted)'}}>{brl(r.valor_entrou)}</td>
+                          <td style={{padding:'8px 6px',textAlign:'right',fontWeight:500}}>{brl(r.valor_ativo)}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center'}}>{r.agend_total}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center',color:r.agend_cancelados>0?'#c0392b':'var(--muted)'}}>{r.agend_cancelados}</td>
+                          <td style={{padding:'8px 6px',textAlign:'center',color:r.agend_apresentados>0?'#2e7d32':'var(--muted)'}}>{r.agend_apresentados}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
