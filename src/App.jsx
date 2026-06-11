@@ -691,6 +691,41 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
               <div style={S.sectionTitle}>PRÓXIMO PASSO</div>
               <div style={{fontSize:12,lineHeight:1.6,background:'#f0f9f4',padding:'10px 12px',borderRadius:6,border:'1px solid #d1f0e0'}}>{lead.ai_next_step}</div>
             </>)}
+            <div style={{marginTop:16,marginBottom:16}}>
+              <div style={S.sectionTitle}>REGISTRAR CONTATO MANUAL</div>
+              <div style={{fontSize:11,color:'var(--muted)',marginBottom:8,lineHeight:1.4}}>
+                Use quando entrar em contato com o cliente fora do WhatsApp. O lead sai da lista de "parados".
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6}}>
+                {[
+                  {icon:'📞',label:'Ligação'},
+                  {icon:'🎙️',label:'Áudio'},
+                  {icon:'👥',label:'Presencial'},
+                  {icon:'✍️',label:'Outro'}
+                ].map(b => (
+                  <button key={b.label} onClick={async () => {
+                    if (!lead.vendor) { alert('Lead sem vendedor — não dá pra registrar contato'); return; }
+                    const { error } = await supabase.rpc('leblanc_registrar_contato_manual', {
+                      p_lead_id: lead.id,
+                      p_vendedor: lead.vendor,
+                      p_telefone: lead.phone || '',
+                      p_tipo_contato: b.label
+                    });
+                    if (error) { alert('Erro: ' + error.message); return; }
+                    onUpdate && onUpdate({ ...lead, updated_at: new Date().toISOString() });
+                    if (tab === 'conversa') loadConversas();
+                    alert(`✓ Contato (${b.label}) registrado`);
+                  }} style={{
+                    padding:'10px 12px',background:'#fff',border:'1px solid var(--border)',
+                    borderRadius:6,fontSize:12,cursor:'pointer',display:'flex',
+                    alignItems:'center',gap:6,fontFamily:'var(--sans)'
+                  }}>
+                    <span style={{fontSize:16}}>{b.icon}</span>
+                    <span>{b.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div style={{marginTop:16}}>
               <div style={S.sectionTitle}>OBSERVAÇÕES DO VENDEDOR</div>
 
