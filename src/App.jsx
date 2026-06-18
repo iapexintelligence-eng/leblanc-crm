@@ -1818,7 +1818,7 @@ export default function LeBlancCRM() {
           <div className="kpis">
             <div className="kpi"><div className="klabel">Total de leads</div><div className="kval">{kpis.total}</div><div className="kdelta">no CRM</div></div>
             <div className="kpi hi"><div className="klabel">Leads quentes</div><div className="kval">{kpis.quentes}</div><div className="kdelta">alta prioridade</div></div>
-            <div className="kpi"><div className="klabel">Em negociação</div><div className="kval">{kpis.pipeline}</div><div className="kdelta">no funil</div></div>
+            <div className="kpi"><div className="klabel">No funil</div><div className="kval">{kpis.pipeline}</div><div className="kdelta">ativos</div></div>
             <div className="kpi"><div className="klabel">Fechados</div><div className="kval">{kpis.fechados}</div><div className="kdelta green">convertidos</div></div>
           </div>
 
