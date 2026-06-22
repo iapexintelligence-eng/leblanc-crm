@@ -1916,6 +1916,7 @@ export default function LeBlancCRM() {
                           if(!newLead.name.trim()) return;
                           const { data } = await supabase.schema('leblanc').from('leads').insert({
                             ...newLead,
+                            vendor: newLead.vendor || user?.vendor_name || '',
                             stage:'novo',
                             created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString(),
