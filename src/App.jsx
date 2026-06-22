@@ -270,6 +270,126 @@ function VendorAvatar({ name }) {
   return <div className="vav" title={name}>{v.initials}</div>;
 }
 
+function MediaMessage({ tipo, media_url, media_filename, media_duration_sec, media_caption }) {
+  const [signedUrl, setSignedUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchUrl() {
+      if (!media_url) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error: e } = await supabase.storage
+          .from('leblanc-midias')
+          .createSignedUrl(media_url, 3600);
+        if (cancelled) return;
+        if (e || !data?.signedUrl) {
+          setError(true);
+        } else {
+          setSignedUrl(data.signedUrl);
+        }
+      } catch (_) {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchUrl();
+    return () => { cancelled = true; };
+  }, [media_url]);
+
+  if (loading) {
+    return (
+      <div style={{ fontSize: 12, color: '#999', padding: 6 }}>
+        ⏳ Carregando mídia...
+      </div>
+    );
+  }
+
+  if (error || !signedUrl) {
+    return (
+      <div style={{ fontSize: 12, color: '#c00', padding: 6 }}>
+        ⚠️ Mídia indisponível
+      </div>
+    );
+  }
+
+  if (tipo === 'audio') {
+    return (
+      <div style={{ padding: '4px 0' }}>
+        <audio
+          controls
+          src={signedUrl}
+          style={{ width: '100%', maxWidth: 300, display: 'block' }}
+        >
+          Seu navegador não suporta áudio
+        </audio>
+        <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+          🎵 {media_filename || 'audio'}
+          {media_duration_sec ? ` • ${media_duration_sec}s` : ''}
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === 'imagem') {
+    return (
+      <div style={{ padding: '4px 0' }}>
+        <img
+          src={signedUrl}
+          alt={media_caption || 'Imagem'}
+          style={{
+            maxWidth: 250,
+            maxHeight: 250,
+            borderRadius: 8,
+            cursor: 'pointer',
+            display: 'block',
+          }}
+          onClick={() => window.open(signedUrl, '_blank')}
+        />
+        {media_caption && (
+          <div style={{ fontSize: 13, marginTop: 4 }}>{media_caption}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (tipo === 'documento') {
+    return (
+      <div style={{ padding: '4px 0' }}>
+        <a
+          href={signedUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 14px',
+            border: '1px solid #ddd',
+            borderRadius: 8,
+            textDecoration: 'none',
+            color: '#333',
+            background: '#f9f9f9',
+          }}
+        >
+          📄 {media_filename || 'Documento'}
+        </a>
+        {media_caption && (
+          <div style={{ fontSize: 13, marginTop: 4 }}>{media_caption}</div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
   const tcls = { hot:"th", warm:"tw", cold:"tc" }[lead.temperature] || "tc";
   const tlabel = { hot:"Quente", warm:"Morno", cold:"Frio" }[lead.temperature] || "Frio";
@@ -336,7 +456,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   async function loadConversas() {
     const { data, error } = await supabase
       .from('leblanc_conversas')
-      .select('id, de, mensagem, vendedor, created_at')
+      .select('id, de, mensagem, vendedor, created_at, tipo, media_url, media_filename, media_duration_sec, media_caption')
       .or(`lead_id.eq.${lead.id},telefone_cliente.eq.${lead.phone}`)
       .order('created_at', { ascending: true });
     if (error) console.error('Erro conversa vendedor:', error);
@@ -857,7 +977,17 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                       {' · '}
                       {new Date(msg.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
                     </div>
-                    {msg.mensagem}
+                    {(msg.tipo === 'audio' || msg.tipo === 'imagem' || msg.tipo === 'documento') && msg.media_url ? (
+                      <MediaMessage
+                        tipo={msg.tipo}
+                        media_url={msg.media_url}
+                        media_filename={msg.media_filename}
+                        media_duration_sec={msg.media_duration_sec}
+                        media_caption={msg.media_caption}
+                      />
+                    ) : (
+                      msg.mensagem
+                    )}
                   </div>
                 );
               })}
