@@ -1130,6 +1130,7 @@ function Reports({ leads, isGerente, vendorName }) {
   const [fHistMes, setFHistMes] = useState('todos');
   const [resumoMes, setResumoMes] = useState(null);
   const [resumoMesAtual, setResumoMesAtual] = useState('');
+  const [activeTab, setActiveTab] = useState('operacional');
   useEffect(() => {
     (async () => {
       if (!isGerente) return;
@@ -1216,7 +1217,28 @@ function Reports({ leads, isGerente, vendorName }) {
   return (
     <div className="reports-wrap">
       <div className="reports-grid">
-        {!isGerente && vendorName && (() => {
+        <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'1px solid var(--border)',gridColumn:'1/-1'}}>
+          {[
+            { id:'operacional', label:'Operacional' },
+            { id:'historico', label:'Histórico' },
+            { id:'performance', label:'Performance' }
+          ].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              style={{
+                background:'none',border:'none',padding:'10px 18px',
+                fontSize:11,textTransform:'uppercase',letterSpacing:'.1em',
+                cursor:'pointer',fontFamily:"'Jost',sans-serif",
+                color: activeTab === t.id ? 'var(--dark)' : 'var(--muted)',
+                fontWeight: activeTab === t.id ? 600 : 400,
+                borderBottom: activeTab === t.id ? '2px solid var(--dark)' : '2px solid transparent',
+                marginBottom:'-1px',
+                transition:'all .15s ease'
+              }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {activeTab === 'operacional' && !isGerente && vendorName && (() => {
           const m = painelOperacional.linhas.find(p => p.name === vendorName);
           if (!m) return null;
           return (
@@ -1242,7 +1264,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           );
         })()}
-        {isGerente && (
+        {activeTab === 'operacional' && isGerente && (
           <div className="report-card full">
             <div className="report-title">Painel por vendedora — visão operacional</div>
             <div style={{display:'flex',gap:8,fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',paddingBottom:8,borderBottom:'1px solid var(--border)'}}>
@@ -1267,7 +1289,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'operacional' && isGerente && (
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:8}}>
               <div className="report-title" style={{marginBottom:0}}>📊 Resumo mensal de leads</div>
@@ -1350,7 +1372,7 @@ function Reports({ leads, isGerente, vendorName }) {
             })()}
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'historico' && isGerente && (
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
               <div className="report-title" style={{marginBottom:0}}>📊 Histórico mensal por vendedora</div>
@@ -1422,7 +1444,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'operacional' && isGerente && (
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
               <div className="report-title" style={{marginBottom:0}}>⚠️ Leads parados — sem movimentação</div>
@@ -1458,7 +1480,7 @@ function Reports({ leads, isGerente, vendorName }) {
             )}
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'performance' && isGerente && (
           <div className="report-card full">
             <div className="report-title">Funil de agendamentos</div>
             {funil.total === 0 ? (
@@ -1497,7 +1519,7 @@ function Reports({ leads, isGerente, vendorName }) {
             )}
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'performance' && isGerente && (
           <div className="report-card full">
             <div className="report-title">Meta mensal — novos agendamentos (16/mês)</div>
             {metaSemanal.every(m => m.novos === 0) ? (
@@ -1526,7 +1548,7 @@ function Reports({ leads, isGerente, vendorName }) {
             )}
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'operacional' && isGerente && (
           <div className="report-card full">
             <div className="report-title">Valor em carteira por vendedor</div>
             <div style={{display:'flex',gap:16,marginBottom:12,fontSize:12}}>
@@ -1545,7 +1567,7 @@ function Reports({ leads, isGerente, vendorName }) {
             ))}
           </div>
         )}
-        {isGerente && (
+        {activeTab === 'historico' && isGerente && (
           <div className="report-card full">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,flexWrap:'wrap',gap:8}}>
               <div className="report-title" style={{marginBottom:0}}>Leads perdidos — observações</div>
@@ -1579,7 +1601,7 @@ function Reports({ leads, isGerente, vendorName }) {
             })()}
           </div>
         )}
-        {!isGerente && (
+        {activeTab === 'performance' && !isGerente && (
           <div className="report-card full">
             <div className="report-title">Minha carteira × convertido</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -1594,7 +1616,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           </div>
         )}
-        {!isGerente && (() => {
+        {activeTab === 'performance' && !isGerente && (() => {
           const m = metaSemanal.find(x => x.name === vendorName);
           if (!m) return null;
           const cor = m.bateu ? '#2e7d32' : (m.noRitmo ? '#1565c0' : '#c0392b');
@@ -1611,7 +1633,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           );
         })()}
-        {!isGerente && (
+        {activeTab === 'performance' && !isGerente && (
           <div className="report-card full">
             <div className="report-title">Meus agendamentos</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8}}>
@@ -1636,6 +1658,7 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           </div>
         )}
+        {activeTab === 'performance' && (
         <div className="report-card full">
           <div className="report-title">Leads por vendedor — taxa de conversão</div>
           {vendorStats.map(v => (
@@ -1670,7 +1693,9 @@ function Reports({ leads, isGerente, vendorName }) {
             <div style={{textAlign:"center",padding:"20px 0",color:"var(--faint)",fontSize:11}}>Nenhum lead atribuído ainda</div>
           )}
         </div>
+        )}
 
+        {activeTab === 'operacional' && (
         <div className="report-card">
           <div className="report-title">Status geral dos leads</div>
           <div className="pie-row">
@@ -1708,7 +1733,9 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           )}
         </div>
+        )}
 
+        {activeTab === 'operacional' && (
         <div className="report-card">
           <div className="report-title">Leads por região</div>
           {regionStats.length === 0 && (
@@ -1726,7 +1753,9 @@ function Reports({ leads, isGerente, vendorName }) {
             </div>
           ))}
         </div>
+        )}
 
+        {activeTab === 'historico' && (
         <div className="report-card full">
           <div className="report-title">Evolução de leads — últimos 8 meses</div>
           <div className="evolution-bars">
@@ -1739,6 +1768,7 @@ function Reports({ leads, isGerente, vendorName }) {
             ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
