@@ -1128,6 +1128,16 @@ function Reports({ leads, isGerente, vendorName }) {
   const [histMensal, setHistMensal] = useState([]);
   const [fHistVend, setFHistVend] = useState('todos');
   const [fHistMes, setFHistMes] = useState('todos');
+  const [resumoMes, setResumoMes] = useState(null);
+  const [resumoMesAtual, setResumoMesAtual] = useState('');
+  useEffect(() => {
+    (async () => {
+      if (!isGerente) return;
+      const hoje = new Date();
+      const mesAtualStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-01`;
+      setResumoMesAtual(resumoMesAtual || mesAtualStr);
+    })();
+  }, [isGerente]);
   useEffect(() => {
     (async () => {
       if (!isGerente) return;
@@ -1255,6 +1265,89 @@ function Reports({ leads, isGerente, vendorName }) {
             <div style={{fontSize:10,color:'var(--muted)',marginTop:10,textTransform:'capitalize'}}>
               Mês: {painelOperacional.mesNome} · Semana: {painelOperacional.semanaIni} a {painelOperacional.semanaFim}
             </div>
+          </div>
+        )}
+        {isGerente && (
+          <div className="report-card full">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:8}}>
+              <div className="report-title" style={{marginBottom:0}}>📊 Resumo mensal de leads</div>
+              <select
+                value={resumoMesAtual}
+                onChange={e=>setResumoMesAtual(e.target.value)}
+                style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}
+              >
+                {[...new Set(histMensal.map(r => r.mes))].sort().reverse().map(m => {
+                  const d = new Date(m + 'T12:00:00');
+                  const lbl = d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+                  return <option key={m} value={m}>{lbl.charAt(0).toUpperCase()+lbl.slice(1)}</option>;
+                })}
+              </select>
+            </div>
+
+            {(() => {
+              const dadosMes = histMensal.filter(r => r.mes === resumoMesAtual && r.vendor);
+              const totais = dadosMes.reduce((acc, r) => ({
+                recebidos: acc.recebidos + Number(r.recebidos),
+                ativos: acc.ativos + Number(r.ativos),
+                perdidos: acc.perdidos + Number(r.perdidos),
+                vendidos: acc.vendidos + Number(r.vendidos),
+              }), { recebidos:0, ativos:0, perdidos:0, vendidos:0 });
+              const brl = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR',{maximumFractionDigits:0});
+
+              return (
+                <>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:18}}>
+                    <div style={{padding:14,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                      <div style={{fontSize:26,fontWeight:600,color:'var(--dark)'}}>{totais.recebidos}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:4}}>Entraram</div>
+                    </div>
+                    <div style={{padding:14,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                      <div style={{fontSize:26,fontWeight:600,color:'#1565c0'}}>{totais.ativos}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:4}}>Ativos</div>
+                    </div>
+                    <div style={{padding:14,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                      <div style={{fontSize:26,fontWeight:600,color:'#c0392b'}}>{totais.perdidos}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:4}}>Perdidos {totais.recebidos > 0 ? `(${Math.round(totais.perdidos/totais.recebidos*100)}%)` : ''}</div>
+                    </div>
+                    <div style={{padding:14,background:'var(--bg2)',borderRadius:6,textAlign:'center'}}>
+                      <div style={{fontSize:26,fontWeight:600,color:'#2e7d32'}}>{totais.vendidos}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginTop:4}}>Vendidos</div>
+                    </div>
+                  </div>
+
+                  <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Por vendedora</div>
+                  <table style={{width:'100%',fontSize:12,borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr style={{color:'var(--muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid var(--border)'}}>
+                        <th style={{padding:'6px 4px',textAlign:'left'}}>Vendedora</th>
+                        <th style={{padding:'6px 4px',textAlign:'center'}}>Receb.</th>
+                        <th style={{padding:'6px 4px',textAlign:'center'}}>Ativos</th>
+                        <th style={{padding:'6px 4px',textAlign:'center'}}>Perdidos</th>
+                        <th style={{padding:'6px 4px',textAlign:'center'}}>Vendidos</th>
+                        <th style={{padding:'6px 4px',textAlign:'right'}}>R$ ativo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dadosMes.sort((a,b) => Number(b.recebidos) - Number(a.recebidos)).map((r,i) => {
+                        const pctPerda = Number(r.recebidos) > 0 ? Math.round(Number(r.perdidos)/Number(r.recebidos)*100) : 0;
+                        return (
+                          <tr key={i} style={{borderBottom:'1px solid var(--border)'}}>
+                            <td style={{padding:'8px 4px'}}>{r.vendor}</td>
+                            <td style={{padding:'8px 4px',textAlign:'center',fontWeight:500}}>{r.recebidos}</td>
+                            <td style={{padding:'8px 4px',textAlign:'center'}}>{r.ativos}</td>
+                            <td style={{padding:'8px 4px',textAlign:'center',color:pctPerda>=40?'#c0392b':(pctPerda>=20?'#e65100':'var(--muted)')}}>
+                              {r.perdidos}{Number(r.perdidos)>0 && ` (${pctPerda}%)`}
+                            </td>
+                            <td style={{padding:'8px 4px',textAlign:'center',color:Number(r.vendidos)>0?'#2e7d32':'var(--muted)',fontWeight:Number(r.vendidos)>0?600:400}}>{r.vendidos}</td>
+                            <td style={{padding:'8px 4px',textAlign:'right',fontWeight:500}}>{brl(r.valor_ativo)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </>
+              );
+            })()}
           </div>
         )}
         {isGerente && (
