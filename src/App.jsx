@@ -563,6 +563,290 @@ function ModalGerenciarTags({ tagsCatalogo, onClose, userEmail, onRefresh }) {
   );
 }
 
+const btnIcon = {
+  background: 'transparent', border: 'none', cursor: 'pointer',
+  fontSize: 16, padding: 2, lineHeight: 1
+};
+
+function TarefaCard({ tarefa, atrasada, concluida, onConcluir, onReabrir, onDeletar }) {
+  const cor = concluida ? '#94a3b8' : atrasada ? '#ef4444' : '#3b82f6';
+  return (
+    <div style={{
+      padding: 10, marginBottom: 8, borderLeft: `3px solid ${cor}`,
+      background: concluida ? '#f9fafb' : 'white',
+      borderRadius: 4, border: '1px solid #eee',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, textDecoration: concluida ? 'line-through' : 'none', color: concluida ? '#999' : '#000' }}>
+            {tarefa.titulo}
+          </div>
+          {tarefa.descricao && (
+            <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{tarefa.descricao}</div>
+          )}
+          {tarefa.prazo && (
+            <div style={{ fontSize: 11, color: atrasada ? '#ef4444' : '#888', marginTop: 4 }}>
+              {atrasada && '⚠️ '}
+              {new Date(tarefa.prazo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>
+            {tarefa.tipo} • {tarefa.vendedor}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {concluida ? (
+            <button onClick={onReabrir} style={btnIcon} title="Reabrir">↩</button>
+          ) : (
+            <button onClick={onConcluir} style={{...btnIcon, color: '#10b981'}} title="Concluir">✓</button>
+          )}
+          <button onClick={onDeletar} style={{...btnIcon, color: '#ef4444'}} title="Deletar">×</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TarefasDoLead({ leadId, leadVendor, userVendorName }) {
+  const [tarefas, setTarefas] = useState([]);
+  const [criando, setCriando] = useState(false);
+  const [formData, setFormData] = useState({ titulo: '', descricao: '', prazo: '', tipo: 'followup' });
+
+  async function carregar() {
+    const { data } = await supabase.from('leblanc_tarefas')
+      .select('*')
+      .eq('lead_id', leadId)
+      .order('prazo', { ascending: true, nullsFirst: false });
+    setTarefas(data || []);
+  }
+  useEffect(() => { carregar(); }, [leadId]);
+
+  async function criar() {
+    if (!formData.titulo.trim()) { alert('Título obrigatório'); return; }
+    const vendedorAtribuido = userVendorName || leadVendor || 'Geral';
+    const { error } = await supabase.from('leblanc_tarefas').insert({
+      lead_id: leadId,
+      vendedor: vendedorAtribuido,
+      titulo: formData.titulo.trim(),
+      descricao: formData.descricao.trim() || null,
+      tipo: formData.tipo,
+      prazo: formData.prazo ? new Date(formData.prazo).toISOString() : null,
+      status: 'pendente',
+    });
+    if (error) { alert(error.message); return; }
+    setFormData({ titulo: '', descricao: '', prazo: '', tipo: 'followup' });
+    setCriando(false);
+    await carregar();
+  }
+
+  async function concluir(id) {
+    await supabase.from('leblanc_tarefas')
+      .update({ status: 'concluida', completed_at: new Date().toISOString() })
+      .eq('id', id);
+    await carregar();
+  }
+  async function reabrir(id) {
+    await supabase.from('leblanc_tarefas')
+      .update({ status: 'pendente', completed_at: null })
+      .eq('id', id);
+    await carregar();
+  }
+  async function deletar(id) {
+    if (!confirm('Deletar essa tarefa?')) return;
+    await supabase.from('leblanc_tarefas').delete().eq('id', id);
+    await carregar();
+  }
+
+  const agora = new Date();
+  const pendentes = tarefas.filter(t => t.status === 'pendente');
+  const concluidas = tarefas.filter(t => t.status === 'concluida');
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <strong style={{ fontSize: 14 }}>Tarefas ({pendentes.length} pendentes)</strong>
+        <button onClick={() => setCriando(!criando)}
+          style={{ fontSize: 12, padding: '4px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+          {criando ? 'Cancelar' : '+ Nova tarefa'}
+        </button>
+      </div>
+      {criando && (
+        <div style={{ padding: 12, background: '#f9fafb', borderRadius: 6, marginBottom: 16 }}>
+          <input type="text" placeholder="Título da tarefa *" value={formData.titulo}
+            onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+            style={{ width: '100%', padding: 6, marginBottom: 6, border: '1px solid #ddd', borderRadius: 4, boxSizing: 'border-box' }}/>
+          <textarea placeholder="Descrição (opcional)" value={formData.descricao}
+            onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} rows={2}
+            style={{ width: '100%', padding: 6, marginBottom: 6, border: '1px solid #ddd', borderRadius: 4, boxSizing: 'border-box', fontFamily: 'inherit' }}/>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input type="datetime-local" value={formData.prazo}
+              onChange={(e) => setFormData({ ...formData, prazo: e.target.value })}
+              style={{ flex: 1, padding: 6, border: '1px solid #ddd', borderRadius: 4 }}/>
+            <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+              style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4 }}>
+              <option value="followup">Follow-up</option>
+              <option value="ligacao">Ligação</option>
+              <option value="reuniao">Reunião</option>
+              <option value="envio">Envio</option>
+              <option value="visita">Visita</option>
+            </select>
+          </div>
+          <button onClick={criar}
+            style={{ width: '100%', padding: 8, background: '#10b981', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            Criar tarefa
+          </button>
+        </div>
+      )}
+      {pendentes.map(t => {
+        const atrasada = t.prazo && new Date(t.prazo) < agora;
+        return (
+          <TarefaCard key={t.id} tarefa={t} atrasada={atrasada}
+            onConcluir={() => concluir(t.id)} onDeletar={() => deletar(t.id)}/>
+        );
+      })}
+      {concluidas.length > 0 && (
+        <details style={{ marginTop: 16 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#666' }}>
+            Concluídas ({concluidas.length})
+          </summary>
+          {concluidas.map(t => (
+            <TarefaCard key={t.id} tarefa={t} concluida={true}
+              onReabrir={() => reabrir(t.id)} onDeletar={() => deletar(t.id)}/>
+          ))}
+        </details>
+      )}
+      {tarefas.length === 0 && !criando && (
+        <div style={{ textAlign: 'center', color: '#999', padding: 24, fontSize: 13 }}>
+          Nenhuma tarefa criada ainda
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaginaTarefas({ userVendorName, userRole, abrirLead }) {
+  const [tarefas, setTarefas] = useState([]);
+  const [filtroStatus, setFiltroStatus] = useState('pendentes');
+  const [leadNames, setLeadNames] = useState({});
+
+  async function carregar() {
+    let query = supabase.from('leblanc_tarefas').select('*');
+    if (userRole !== 'gerente' && userVendorName) {
+      query = query.eq('vendedor', userVendorName);
+    }
+    const { data } = await query.order('prazo', { ascending: true, nullsFirst: false });
+    setTarefas(data || []);
+  }
+  useEffect(() => {
+    carregar();
+    const i = setInterval(carregar, 60000);
+    return () => clearInterval(i);
+  }, [userRole, userVendorName]);
+
+  useEffect(() => {
+    async function fetchNames() {
+      const leadIds = [...new Set(tarefas.map(t => t.lead_id).filter(Boolean))];
+      if (leadIds.length === 0) return;
+      const { data } = await supabase.schema('leblanc').from('leads').select('id, name').in('id', leadIds);
+      const map = {};
+      (data || []).forEach(l => { map[l.id] = l.name; });
+      setLeadNames(map);
+    }
+    fetchNames();
+  }, [tarefas]);
+
+  const agora = new Date();
+  const fimHoje = new Date(); fimHoje.setHours(23, 59, 59, 999);
+  const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0);
+
+  const filtradas = tarefas.filter(t => {
+    if (filtroStatus === 'pendentes') return t.status === 'pendente';
+    if (filtroStatus === 'hoje') {
+      if (t.status !== 'pendente' || !t.prazo) return false;
+      const p = new Date(t.prazo);
+      return p >= inicioHoje && p <= fimHoje;
+    }
+    if (filtroStatus === 'atrasadas') {
+      return t.status === 'pendente' && t.prazo && new Date(t.prazo) < agora;
+    }
+    if (filtroStatus === 'concluidas') return t.status === 'concluida';
+    return true;
+  });
+
+  const counts = {
+    pendentes: tarefas.filter(t => t.status === 'pendente').length,
+    hoje: tarefas.filter(t => {
+      if (t.status !== 'pendente' || !t.prazo) return false;
+      const p = new Date(t.prazo);
+      return p >= inicioHoje && p <= fimHoje;
+    }).length,
+    atrasadas: tarefas.filter(t => t.status === 'pendente' && t.prazo && new Date(t.prazo) < agora).length,
+    concluidas: tarefas.filter(t => t.status === 'concluida').length,
+  };
+
+  return (
+    <div style={{ padding: 24, overflowY: 'auto', flex: 1 }}>
+      <h2 style={{ marginBottom: 16, fontFamily: "'Cormorant Garamond',serif", fontWeight: 400 }}>
+        📋 {userRole === 'gerente' ? 'Todas as Tarefas' : 'Minhas Tarefas'}
+      </h2>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {[
+          { id: 'pendentes', label: `Pendentes (${counts.pendentes})` },
+          { id: 'hoje', label: `Hoje (${counts.hoje})`, cor: '#3b82f6' },
+          { id: 'atrasadas', label: `Atrasadas (${counts.atrasadas})`, cor: '#ef4444' },
+          { id: 'concluidas', label: `Concluídas (${counts.concluidas})`, cor: '#10b981' },
+          { id: 'todas', label: 'Todas' },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFiltroStatus(f.id)}
+            style={{
+              padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+              border: '1px solid #ddd',
+              background: filtroStatus === f.id ? (f.cor || '#000') : 'white',
+              color: filtroStatus === f.id ? 'white' : '#333',
+              fontSize: 13,
+            }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+      {filtradas.length === 0 ? (
+        <div style={{ padding: 48, textAlign: 'center', color: '#999' }}>Nenhuma tarefa nesse filtro</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtradas.map(t => {
+            const atrasada = t.status === 'pendente' && t.prazo && new Date(t.prazo) < agora;
+            return (
+              <div key={t.id}
+                onClick={() => t.lead_id && abrirLead(t.lead_id)}
+                style={{
+                  padding: 14, borderRadius: 8, border: '1px solid #eee',
+                  background: 'white', cursor: t.lead_id ? 'pointer' : 'default',
+                  borderLeft: `4px solid ${atrasada ? '#ef4444' : t.status === 'concluida' ? '#10b981' : '#3b82f6'}`,
+                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 600, textDecoration: t.status === 'concluida' ? 'line-through' : 'none' }}>
+                    {t.titulo}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888' }}>
+                    {t.prazo && new Date(t.prazo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+                {t.descricao && (
+                  <div style={{ fontSize: 13, color: '#555', marginBottom: 4 }}>{t.descricao}</div>
+                )}
+                <div style={{ fontSize: 11, color: '#888' }}>
+                  {leadNames[t.lead_id] || t.lead_id} • {t.vendedor} • {t.tipo}
+                  {atrasada && ' • ⚠️ atrasada'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VendorAvatar({ name }) {
   if (!name) return <div className="novav" title="Sem vendedor">—</div>;
   const v = VENDOR_MAP[name] || { initials: name.slice(0,2).toUpperCase() };
@@ -1364,43 +1648,11 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
 
         {/* ── TAREFAS ── */}
         {tab==='tarefas' && (
-          <div>
-            <div style={S.sectionTitle}>TAREFAS E FOLLOW-UPS</div>
-            {tarefas.length===0 && <div style={{color:'var(--muted)',fontSize:12,marginBottom:14}}>Nenhuma tarefa ainda</div>}
-            {tarefas.map(t => (
-              <div key={t.id} onClick={()=>toggleTarefa(t.id,t.status)}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'var(--bg2)',
-                  borderRadius:6,marginBottom:6,cursor:'pointer',opacity:t.status==='concluida'?.5:1}}>
-                <div style={{width:16,height:16,borderRadius:'50%',flexShrink:0,
-                  border:'2px solid var(--dark)',background:t.status==='concluida'?'var(--dark)':'transparent'}}/>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,textDecoration:t.status==='concluida'?'line-through':'none'}}>{t.descricao}</div>
-                  {t.prazo&&<div style={{fontSize:11,color:'var(--muted)',marginTop:1}}>
-                    ⏱ {new Date(t.prazo).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
-                  </div>}
-                </div>
-                <span style={{fontSize:10,padding:'2px 7px',borderRadius:10,
-                  background:t.status==='pendente'?'#fff3e0':'#e8f5e9',
-                  color:t.status==='pendente'?'#e65100':'#2e7d32'}}>
-                  {t.status==='pendente'?'Pendente':'Concluída'}
-                </span>
-              </div>
-            ))}
-            <div style={{marginTop:14,padding:'12px',background:'var(--bg2)',borderRadius:6}}>
-              <div style={{...S.sectionTitle,marginBottom:8}}>NOVA TAREFA</div>
-              <input value={novaTarefa.descricao} onChange={e=>setNovaTarefa(p=>({...p,descricao:e.target.value}))}
-                placeholder="Descrição da tarefa..."
-                style={{width:'100%',padding:'7px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:12,marginBottom:6,boxSizing:'border-box'}}/>
-              <div style={{display:'flex',gap:6}}>
-                <input type="datetime-local" value={novaTarefa.prazo} onChange={e=>setNovaTarefa(p=>({...p,prazo:e.target.value}))}
-                  style={{flex:1,padding:'6px 8px',border:'1px solid var(--border)',borderRadius:4,fontSize:11}}/>
-                <button onClick={adicionarTarefa}
-                  style={{padding:'6px 14px',background:'var(--dark)',color:'#fff',border:'none',borderRadius:4,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>
-                  + Adicionar
-                </button>
-              </div>
-            </div>
-          </div>
+          <TarefasDoLead
+            leadId={lead.id}
+            leadVendor={lead.vendor}
+            userVendorName={user?.vendor_name}
+          />
         )}
 
         {/* ── AGENDAMENTOS ── */}
@@ -2416,6 +2668,13 @@ export default function LeBlancCRM() {
     dismissToast(notif.id);
   }
 
+  function abrirLead(leadId) {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    setActivePage('pipeline');
+    setSelected(lead);
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
@@ -2509,7 +2768,7 @@ export default function LeBlancCRM() {
             <div className="logo-sub">Pipeline de Vendas</div>
           </div>
           <nav className="nav">
-            {[["pipeline","Pipeline"],["reports","Relatórios"]].map(([id,label])=>(
+            {[["pipeline","Pipeline"],["tarefas","Tarefas"],["reports","Relatórios"]].map(([id,label])=>(
               <div key={id} className={`nav-item${activePage===id?" active":""}`} onClick={()=>{ setActivePage(id); setSelected(null); }}>
                 <div className="nav-dot"/>{label}
               </div>
@@ -2558,6 +2817,12 @@ export default function LeBlancCRM() {
 
           {activePage === "reports" ? (
             <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name}/>
+          ) : activePage === "tarefas" ? (
+            <PaginaTarefas
+              userVendorName={user?.vendor_name}
+              userRole={user?.role}
+              abrirLead={abrirLead}
+            />
           ) : (
             <>
               <div className="filters">
