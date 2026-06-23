@@ -265,6 +265,150 @@ const CSS = `
   .region-count{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--black);}
 `;
 
+async function pedirPermissaoNotificacoes() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+}
+
+function dispararNotificacaoNavegador(notif) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const n = new Notification(notif.titulo, {
+    body: notif.corpo || '',
+    icon: '/favicon.ico',
+    tag: `notif-${notif.id}`,
+  });
+  n.onclick = () => { window.focus(); n.close(); };
+}
+
+function useNotifications(userEmail) {
+  const [notifications, setNotifications] = useState([]);
+  const [naoLidas, setNaoLidas] = useState(0);
+  const [toasts, setToasts] = useState([]);
+  const previousIdsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!userEmail) return;
+
+    async function fetch() {
+      const { data, error } = await supabase
+        .from('leblanc_notifications')
+        .select('*')
+        .eq('destinatario_email', userEmail)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error || !data) return;
+
+      const currentIds = new Set(data.map(n => n.id));
+      const previousIds = previousIdsRef.current;
+      const novasNotifications = data.filter(n => !previousIds.has(n.id) && !n.lida);
+
+      if (previousIds.size > 0) {
+        novasNotifications.forEach(notif => {
+          const toast = { id: notif.id, titulo: notif.titulo, corpo: notif.corpo, tipo: notif.tipo, lead_id: notif.lead_id };
+          setToasts(prev => [...prev, toast]);
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toast.id)), 5000);
+          dispararNotificacaoNavegador(notif);
+        });
+      }
+
+      previousIdsRef.current = currentIds;
+      setNotifications(data);
+      setNaoLidas(data.filter(n => !n.lida).length);
+    }
+
+    fetch();
+    const interval = setInterval(fetch, 15000);
+    return () => clearInterval(interval);
+  }, [userEmail]);
+
+  async function marcarComoLida(id) {
+    await supabase.from('leblanc_notifications').update({ lida: true }).eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n));
+    setNaoLidas(prev => Math.max(0, prev - 1));
+  }
+
+  async function marcarTodasComoLidas() {
+    await supabase.from('leblanc_notifications')
+      .update({ lida: true })
+      .eq('destinatario_email', userEmail)
+      .eq('lida', false);
+    setNotifications(prev => prev.map(n => ({ ...n, lida: true })));
+    setNaoLidas(0);
+  }
+
+  function dismissToast(id) {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }
+
+  return { notifications, naoLidas, marcarComoLida, marcarTodasComoLidas, toasts, dismissToast };
+}
+
+function NotificationToasts({ toasts, onClick }) {
+  return (
+    <div style={{position:'fixed',top:20,right:20,zIndex:9999,display:'flex',flexDirection:'column',gap:8,maxWidth:360}}>
+      {toasts.map(t => {
+        const cor = t.tipo === 'agendamento_1h' ? '#f59e0b' : t.tipo === 'retorno_helena' ? '#9333ea' : '#3b82f6';
+        const icone = t.tipo === 'agendamento_1h' ? '⏰' : t.tipo === 'retorno_helena' ? '🔄' : '👤';
+        return (
+          <div key={t.id} onClick={() => onClick(t)}
+            style={{background:'white',borderLeft:`4px solid ${cor}`,borderRadius:8,padding:'12px 16px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',cursor:t.lead_id?'pointer':'default'}}>
+            <div style={{fontWeight:600,fontSize:14,marginBottom:4}}>{icone} {t.titulo}</div>
+            {t.corpo && <div style={{fontSize:13,color:'#555'}}>{t.corpo}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function NotificationBell({ notifications, naoLidas, onItemClick, onMarcarTodas }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{position:'relative'}}>
+      <button onClick={() => setOpen(!open)}
+        style={{background:'transparent',border:'none',fontSize:22,cursor:'pointer',position:'relative',padding:8}}
+        title="Notificações">
+        🔔
+        {naoLidas > 0 && (
+          <span style={{position:'absolute',top:4,right:4,background:'#dc2626',color:'white',borderRadius:10,padding:'2px 6px',fontSize:10,fontWeight:700,minWidth:18,textAlign:'center'}}>
+            {naoLidas > 99 ? '99+' : naoLidas}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div style={{position:'absolute',top:'calc(100% + 8px)',right:0,width:360,maxHeight:480,overflowY:'auto',background:'white',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:1000}}>
+          <div style={{padding:'12px 16px',borderBottom:'1px solid #eee',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <strong>Notificações</strong>
+            {naoLidas > 0 && (
+              <button onClick={onMarcarTodas} style={{fontSize:12,background:'none',border:'none',color:'#3b82f6',cursor:'pointer'}}>
+                Marcar todas como lidas
+              </button>
+            )}
+          </div>
+          {notifications.length === 0 ? (
+            <div style={{padding:24,textAlign:'center',color:'#999',fontSize:13}}>Nenhuma notificação</div>
+          ) : (
+            notifications.map(n => {
+              const icone = n.tipo === 'agendamento_1h' ? '⏰' : n.tipo === 'retorno_helena' ? '🔄' : '👤';
+              return (
+                <div key={n.id} onClick={() => { onItemClick(n); setOpen(false); }}
+                  style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',cursor:'pointer',background:n.lida?'white':'#eff6ff'}}>
+                  <div style={{fontSize:13,fontWeight:n.lida?400:600,marginBottom:2}}>{icone} {n.titulo}</div>
+                  {n.corpo && <div style={{fontSize:12,color:'#666',marginBottom:2}}>{n.corpo}</div>}
+                  <div style={{fontSize:11,color:'#999'}}>{new Date(n.created_at).toLocaleString('pt-BR')}</div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VendorAvatar({ name }) {
   if (!name) return <div className="novav" title="Sem vendedor">—</div>;
   const v = VENDOR_MAP[name] || { initials: name.slice(0,2).toUpperCase() };
@@ -2059,6 +2203,20 @@ export default function LeBlancCRM() {
   const [showNewLead, setShowNewLead] = useState(false);
   const [newLead, setNewLead] = useState({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
 
+  const notifEmail = user?.email || session?.user?.email;
+  const { notifications, naoLidas, marcarComoLida, marcarTodasComoLidas, toasts, dismissToast } = useNotifications(notifEmail);
+
+  useEffect(() => { pedirPermissaoNotificacoes(); }, []);
+
+  function handleNotificationClick(notif) {
+    if (notif.lead_id) {
+      const lead = leads.find(l => l.id === notif.lead_id);
+      if (lead) setSelected(lead);
+    }
+    if (!notif.lida) marcarComoLida(notif.id);
+    dismissToast(notif.id);
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
@@ -2132,6 +2290,7 @@ export default function LeBlancCRM() {
   return (
     <>
       <style>{CSS}</style>
+      <NotificationToasts toasts={toasts} onClick={handleNotificationClick}/>
       <div className="crm">
         <div className="sidebar">
           <div className="logo-area">
@@ -2165,6 +2324,12 @@ export default function LeBlancCRM() {
                 <span className="search-icon">⌕</span>
                 <input placeholder="Buscar lead, produto, cidade..." value={search} onChange={e=>setSearch(e.target.value)}/>
               </div>
+              <NotificationBell
+                notifications={notifications}
+                naoLidas={naoLidas}
+                onItemClick={handleNotificationClick}
+                onMarcarTodas={marcarTodasComoLidas}
+              />
               <div className="uchip">
                 <div className="uav">{initials}</div>
                 <div className="uname">{user?.name||"—"}</div>
