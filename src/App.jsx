@@ -409,6 +409,160 @@ function NotificationBell({ notifications, naoLidas, onItemClick, onMarcarTodas 
   );
 }
 
+function TagPill({ nome, cor, size = 'sm', onRemove }) {
+  const styles = {
+    sm: { fontSize: 10, padding: '2px 8px', borderRadius: 10 },
+    md: { fontSize: 12, padding: '4px 10px', borderRadius: 12 },
+  }[size];
+  return (
+    <span style={{
+      ...styles,
+      background: cor,
+      color: '#fff',
+      fontWeight: 600,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      whiteSpace: 'nowrap',
+    }}>
+      {nome}
+      {onRemove && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          style={{background:'transparent',border:'none',color:'#fff',cursor:'pointer',padding:0,fontSize:'inherit',opacity:0.7}}
+          title="Remover tag"
+        >×</button>
+      )}
+    </span>
+  );
+}
+
+function TagsDoLead({ tagsCatalogo, tagsDoLead, onAdicionar, onRemover }) {
+  const [picker, setPicker] = useState(false);
+  const tagsDisponiveis = tagsCatalogo.filter(t => !tagsDoLead.some(lt => lt.id === t.id));
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>TAGS</div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {tagsDoLead.map(t => (
+          <TagPill key={t.id} nome={t.nome} cor={t.cor} size="md" onRemove={() => onRemover(t.id)} />
+        ))}
+        <button
+          onClick={() => setPicker(!picker)}
+          style={{fontSize:12,padding:'4px 10px',borderRadius:12,border:'1px dashed #999',background:'transparent',cursor:'pointer',color:'#666'}}
+        >+ Adicionar tag</button>
+      </div>
+      {picker && (
+        <div style={{marginTop:8,padding:8,border:'1px solid #ddd',borderRadius:6,background:'#f9f9f9',maxHeight:200,overflowY:'auto'}}>
+          {tagsDisponiveis.length === 0 ? (
+            <div style={{fontSize:12,color:'#999'}}>Nenhuma tag disponível. Crie uma nova em "Gerenciar tags".</div>
+          ) : (
+            tagsDisponiveis.map(t => (
+              <div key={t.id} onClick={() => { onAdicionar(t.id); setPicker(false); }}
+                style={{padding:'4px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                <TagPill nome={t.nome} cor={t.cor} size="sm" />
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FiltroTagsKanban({ tagsCatalogo, filtroTags, setFiltroTags }) {
+  const [open, setOpen] = useState(false);
+  function toggle(tagId) {
+    setFiltroTags(prev => prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]);
+  }
+  return (
+    <div style={{position:'relative',display:'inline-block'}}>
+      <button onClick={() => setOpen(!open)}
+        style={{padding:'4px 12px',borderRadius:2,border:'1px solid var(--border)',background:filtroTags.length>0?'#eff6ff':'none',cursor:'pointer',fontSize:10,color:'var(--mid)',fontFamily:"'Jost',sans-serif",letterSpacing:'.06em',whiteSpace:'nowrap'}}>
+        🏷️ Tags {filtroTags.length > 0 && `(${filtroTags.length})`}
+      </button>
+      {open && (
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:'white',border:'1px solid #ddd',borderRadius:6,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',minWidth:200,maxHeight:300,overflowY:'auto',zIndex:100}}>
+          {filtroTags.length > 0 && (
+            <button onClick={() => setFiltroTags([])}
+              style={{width:'100%',padding:8,fontSize:12,background:'none',border:'none',borderBottom:'1px solid #eee',cursor:'pointer',color:'#3b82f6'}}>
+              Limpar filtros
+            </button>
+          )}
+          {tagsCatalogo.map(t => (
+            <label key={t.id}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',background:filtroTags.includes(t.id)?'#f0f9ff':'transparent'}}>
+              <input type="checkbox" checked={filtroTags.includes(t.id)} onChange={() => toggle(t.id)}/>
+              <TagPill nome={t.nome} cor={t.cor} size="sm" />
+            </label>
+          ))}
+          {tagsCatalogo.length === 0 && (
+            <div style={{padding:12,fontSize:12,color:'#999',textAlign:'center'}}>Nenhuma tag criada</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModalGerenciarTags({ tagsCatalogo, onClose, userEmail, onRefresh }) {
+  const [novoNome, setNovoNome] = useState('');
+  const [novaCor, setNovaCor] = useState('#3b82f6');
+  async function criar() {
+    if (!novoNome.trim()) return;
+    const { error } = await supabase.from('leblanc_tags')
+      .insert({ nome: novoNome.trim(), cor: novaCor, criado_por: userEmail });
+    if (error) {
+      alert(error.message.includes('duplicate') ? 'Tag com esse nome já existe' : error.message);
+      return;
+    }
+    setNovoNome('');
+    setNovaCor('#3b82f6');
+    await onRefresh();
+  }
+  async function deletar(tagId) {
+    if (!confirm('Deletar essa tag? Será removida de todos os leads.')) return;
+    await supabase.from('leblanc_tags').delete().eq('id', tagId);
+    await onRefresh();
+  }
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}} onClick={onClose}>
+      <div style={{background:'white',borderRadius:8,padding:20,width:480,maxHeight:'80vh',overflowY:'auto'}} onClick={(e) => e.stopPropagation()}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,alignItems:'center'}}>
+          <h3 style={{margin:0}}>Gerenciar Tags</h3>
+          <button onClick={onClose} style={{border:'none',background:'none',fontSize:20,cursor:'pointer'}}>×</button>
+        </div>
+        <div style={{display:'flex',gap:8,marginBottom:16,padding:12,background:'#f9fafb',borderRadius:6}}>
+          <input type="text" placeholder="Nome da tag" value={novoNome}
+            onChange={(e) => setNovoNome(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') criar(); }}
+            style={{flex:1,padding:6,border:'1px solid #ddd',borderRadius:4}}/>
+          <input type="color" value={novaCor} onChange={(e) => setNovaCor(e.target.value)}
+            style={{width:40,height:32,border:'1px solid #ddd',borderRadius:4,padding:0,cursor:'pointer'}}/>
+          <button onClick={criar}
+            style={{padding:'6px 14px',background:'#3b82f6',color:'white',border:'none',borderRadius:4,cursor:'pointer'}}>
+            Criar
+          </button>
+        </div>
+        <div>
+          {tagsCatalogo.length === 0 && (
+            <div style={{padding:16,textAlign:'center',color:'#999',fontSize:13}}>Nenhuma tag criada ainda</div>
+          )}
+          {tagsCatalogo.map(t => (
+            <div key={t.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #eee'}}>
+              <TagPill nome={t.nome} cor={t.cor} size="md" />
+              <button onClick={() => deletar(t.id)}
+                style={{fontSize:12,color:'#dc2626',background:'none',border:'none',cursor:'pointer'}}>
+                Deletar
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VendorAvatar({ name }) {
   if (!name) return <div className="novav" title="Sem vendedor">—</div>;
   const v = VENDOR_MAP[name] || { initials: name.slice(0,2).toUpperCase() };
@@ -535,7 +689,7 @@ function MediaMessage({ tipo, media_url, media_filename, media_duration_sec, med
   return null;
 }
 
-function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
+function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead = [] }) {
   const tcls = { hot:"th", warm:"tw", cold:"tc" }[lead.temperature] || "tc";
   const tlabel = { hot:"Quente", warm:"Morno", cold:"Frio" }[lead.temperature] || "Frio";
   const ts = new Date(lead.updated_at);
@@ -551,6 +705,12 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
         <div className="mrow"><span>◎</span><span>{lead.city||"—"}</span></div>
         <div className="mrow"><span>◈</span><span>{lead.product||"—"}</span></div>
       </div>
+      {tagsDoLead.length > 0 && (
+        <div style={{display:'flex',gap:4,marginTop:6,marginBottom:6,flexWrap:'wrap'}}>
+          {tagsDoLead.slice(0,3).map(t => <TagPill key={t.id} nome={t.nome} cor={t.cor} size="sm" />)}
+          {tagsDoLead.length > 3 && <span style={{fontSize:10,color:'#666'}}>+{tagsDoLead.length - 3}</span>}
+        </div>
+      )}
       <div className="cbot">
         <div className="btag">{lead.budget||"—"}</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -562,7 +722,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd }) {
   );
 }
 
-function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
+function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag }) {
   const [tab, setTab] = useState('ficha');
   const [conversas, setConversas] = useState([]);
   const [vendorConversas, setVendorConversas] = useState([]);
@@ -899,6 +1059,12 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
         {/* ── FICHA ── */}
         {tab==='ficha' && (
           <div>
+            <TagsDoLead
+              tagsCatalogo={tagsCatalogo}
+              tagsDoLead={tagsDoLead}
+              onAdicionar={(tagId) => onAdicionarTag && onAdicionarTag(lead.id, tagId)}
+              onRemover={(tagId) => onRemoverTag && onRemoverTag(lead.id, tagId)}
+            />
             <div style={{marginBottom:16}}>
               <div style={S.sectionTitle}>ETAPA NO FUNIL</div>
               <select
@@ -2202,8 +2368,41 @@ export default function LeBlancCRM() {
   const [dragging, setDragging] = useState(null);
   const [showNewLead, setShowNewLead] = useState(false);
   const [newLead, setNewLead] = useState({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
+  const [tagsCatalogo, setTagsCatalogo] = useState([]);
+  const [leadTags, setLeadTags] = useState([]);
+  const [filtroTags, setFiltroTags] = useState([]);
+  const [showTagsModal, setShowTagsModal] = useState(false);
 
   const notifEmail = user?.email || session?.user?.email;
+
+  async function carregarTags() {
+    const [{ data: tags }, { data: relacoes }] = await Promise.all([
+      supabase.from('leblanc_tags').select('*').order('nome'),
+      supabase.from('leblanc_lead_tags').select('*'),
+    ]);
+    setTagsCatalogo(tags || []);
+    setLeadTags(relacoes || []);
+  }
+  useEffect(() => { carregarTags(); }, []);
+
+  function getTagsDoLead(leadId) {
+    return leadTags
+      .filter(lt => lt.lead_id === leadId)
+      .map(lt => ({ id: lt.tag_id, nome: lt.tag_nome, cor: lt.tag_cor }));
+  }
+
+  async function adicionarTagLead(leadId, tagId) {
+    const { error } = await supabase.from('leblanc_lead_tags')
+      .insert({ lead_id: leadId, tag_id: tagId, criado_por: notifEmail });
+    if (!error) await carregarTags();
+  }
+
+  async function removerTagLead(leadId, tagId) {
+    const { error } = await supabase.from('leblanc_lead_tags')
+      .delete()
+      .eq('lead_id', leadId).eq('tag_id', tagId);
+    if (!error) await carregarTags();
+  }
   const { notifications, naoLidas, marcarComoLida, marcarTodasComoLidas, toasts, dismissToast } = useNotifications(notifEmail);
 
   useEffect(() => { pedirPermissaoNotificacoes(); }, []);
@@ -2252,8 +2451,12 @@ export default function LeBlancCRM() {
     if (search && !l.name?.toLowerCase().includes(search.toLowerCase()) &&
         !l.product?.toLowerCase().includes(search.toLowerCase()) &&
         !l.city?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filtroTags.length > 0) {
+      const ids = leadTags.filter(lt => lt.lead_id === l.id).map(lt => lt.tag_id);
+      if (!ids.some(id => filtroTags.includes(id))) return false;
+    }
     return true;
-  }), [leads, fv, fr, ft, search]);
+  }), [leads, fv, fr, ft, search, filtroTags, leadTags]);
 
   const kpis = useMemo(() => ({
     total: leads.length,
@@ -2291,6 +2494,14 @@ export default function LeBlancCRM() {
     <>
       <style>{CSS}</style>
       <NotificationToasts toasts={toasts} onClick={handleNotificationClick}/>
+      {showTagsModal && (
+        <ModalGerenciarTags
+          tagsCatalogo={tagsCatalogo}
+          onClose={() => setShowTagsModal(false)}
+          userEmail={notifEmail}
+          onRefresh={carregarTags}
+        />
+      )}
       <div className="crm">
         <div className="sidebar">
           <div className="logo-area">
@@ -2363,6 +2574,13 @@ export default function LeBlancCRM() {
                 <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
                 <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
                 <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
+                <div className="fdiv"/>
+                <FiltroTagsKanban tagsCatalogo={tagsCatalogo} filtroTags={filtroTags} setFiltroTags={setFiltroTags}/>
+                <button
+                  onClick={()=>setShowTagsModal(true)}
+                  style={{padding:'4px 12px',borderRadius:2,border:'1px solid var(--border)',background:'none',cursor:'pointer',fontSize:10,color:'var(--mid)',fontFamily:"'Jost',sans-serif",letterSpacing:'.06em',whiteSpace:'nowrap'}}>
+                  🏷️ Gerenciar
+                </button>
                 <button
                   onClick={()=>setShowNewLead(true)}
                   style={{marginLeft:'auto',padding:'5px 14px',background:'var(--black)',color:'#fff',border:'none',borderRadius:4,fontSize:11,fontWeight:500,cursor:'pointer',letterSpacing:'.06em',whiteSpace:'nowrap',fontFamily:"'Jost',sans-serif"}}>
@@ -2485,14 +2703,19 @@ export default function LeBlancCRM() {
                             cl.map(lead=><LeadCard key={lead.id} lead={lead} selected={selected?.id===lead.id}
                               onClick={()=>setSelected(selected?.id===lead.id?null:lead)}
                               onDragStart={()=>setDragging(lead.id)}
-                              onDragEnd={()=>setDragging(null)}/>)}
+                              onDragEnd={()=>setDragging(null)}
+                              tagsDoLead={getTagsDoLead(lead.id)}/>)}
                         </div>
                       </div>
                     );
                   })}
                 </div>
                 <div className={`drawer${!selected?" closed":""}`}>
-                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}/>
+                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}
+                    tagsCatalogo={tagsCatalogo}
+                    tagsDoLead={selected ? getTagsDoLead(selected.id) : []}
+                    onAdicionarTag={adicionarTagLead}
+                    onRemoverTag={removerTagLead}/>
                 </div>
               </div>
             </>
