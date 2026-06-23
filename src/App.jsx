@@ -1307,6 +1307,15 @@ function Reports({ leads, isGerente, vendorName }) {
   const [fHistMes, setFHistMes] = useState('todos');
   const [resumoMes, setResumoMes] = useState(null);
   const [resumoMesAtual, setResumoMesAtual] = useState('');
+  const [funilTempo, setFunilTempo] = useState([]);
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from('leblanc_funil_tempo_medio')
+        .select('*');
+      if (!error && data) setFunilTempo(data);
+    })();
+  }, []);
   const [activeTab, setActiveTab] = useState('operacional');
   useEffect(() => {
     (async () => {
@@ -1655,6 +1664,55 @@ function Reports({ leads, isGerente, vendorName }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {activeTab === 'performance' && (
+          <div className="report-card full">
+            <div className="report-title">⏱️ Tempo médio por etapa</div>
+            <div style={{fontSize:12,color:'var(--muted)',marginBottom:14,lineHeight:1.5}}>
+              Quanto tempo um lead fica em média em cada etapa antes de ser movido. Use pra identificar gargalos.
+            </div>
+            {funilTempo.length === 0 ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem dados de funil ainda</div>
+            ) : (
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:520}}>
+                  <thead>
+                    <tr style={{color:'var(--muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid var(--border)'}}>
+                      <th style={{padding:'8px 6px',textAlign:'left'}}>Etapa</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Média</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Mediana</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Range</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Amostras</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {funilTempo.map((row, idx) => {
+                      const cor = row.media_dias >= 3 ? '#fee2e2'
+                                : row.media_dias >= 1.5 ? '#fef3c7'
+                                : '#dcfce7';
+                      return (
+                        <tr key={row.etapa} style={{borderBottom:'1px solid var(--border)',background:cor}}>
+                          <td style={{padding:'8px 6px',fontWeight: idx === 0 ? 600 : 400}}>
+                            {row.etapa}
+                            {idx === 0 && row.media_dias >= 3 && ' ⚠️'}
+                          </td>
+                          <td style={{padding:'8px 6px',textAlign:'right',fontWeight:600}}>{row.media_dias}d</td>
+                          <td style={{padding:'8px 6px',textAlign:'right',color:'#666'}}>{row.mediana_dias}d</td>
+                          <td style={{padding:'8px 6px',textAlign:'right',fontSize:11,color:'#888'}}>
+                            {row.min_dias}d–{row.max_dias}d
+                          </td>
+                          <td style={{padding:'8px 6px',textAlign:'right',fontSize:11,color:'#666'}}>{row.amostras}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{fontSize:11,color:'var(--faint)',marginTop:12,fontStyle:'italic',lineHeight:1.5}}>
+              💡 Quando média e mediana são muito diferentes (ex: Negociação 3.6 vs 0.0), significa que alguns leads ficam parados nessa etapa enquanto outros passam rápido.
+            </div>
           </div>
         )}
         {activeTab === 'performance' && isGerente && (
