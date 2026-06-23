@@ -513,13 +513,50 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
   }
 
   async function fetchHelenaHistory(lead) {
-    const { data, error } = await supabase
+    const leadPhone = lead.phone;
+    const { data: sdrData, error } = await supabase
       .from('leblanc_sdr_chats')
-      .select('id, session_id, message')
-      .eq('session_id', lead.phone)
+      .select('id, session_id, message, created_at')
+      .eq('session_id', leadPhone)
+      .order('created_at', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
     if (error) console.error('Erro Helena:', error);
-    setHelenaHistory(data || []);
+
+    const { data: midiasHelena } = await supabase
+      .from('leblanc_conversas')
+      .select('id, telefone_cliente, de, tipo, mensagem, media_url, media_filename, media_duration_sec, media_caption, created_at')
+      .eq('vendedor', 'Helena')
+      .eq('telefone_cliente', leadPhone)
+      .in('tipo', ['audio', 'imagem', 'documento'])
+      .order('created_at', { ascending: true });
+
+    const mensagensTexto = (sdrData || []).map(m => ({
+      source: 'helena',
+      id: `h-${m.id}`,
+      papel: m.message?.type === 'ai' ? 'helena' : 'cliente',
+      content: m.message?.content || '',
+      created_at: m.created_at,
+      sortKey: m.created_at ? new Date(m.created_at).getTime() : m.id,
+    }));
+
+    const mensagensMidia = (midiasHelena || []).map(m => ({
+      source: 'midia',
+      id: `m-${m.id}`,
+      papel: m.de === 'cliente' ? 'cliente' : 'helena',
+      media: {
+        tipo: m.tipo,
+        media_url: m.media_url,
+        media_filename: m.media_filename,
+        media_duration_sec: m.media_duration_sec,
+        media_caption: m.media_caption,
+      },
+      created_at: m.created_at,
+      sortKey: m.created_at ? new Date(m.created_at).getTime() : m.id,
+    }));
+
+    const conversa = [...mensagensTexto, ...mensagensMidia].sort((a, b) => a.sortKey - b.sortKey);
+    setHelenaHistory(conversa);
+
     const { data: fups } = await supabase
       .from('followups')
       .select('*')
@@ -925,8 +962,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                 <div style={{fontSize:12,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma conversa registrada</div>
               )}
               {helenaHistory.map((row) => {
-                const isHelena = row.message?.type === 'ai';
-                const texto = row.message?.content || '';
+                const isHelena = row.papel === 'helena';
                 return (
                   <div key={row.id} style={{
                     alignSelf: isHelena ? 'flex-end' : 'flex-start',
@@ -940,7 +976,17 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance }) {
                     <div style={{fontSize:10,color:'#888',marginBottom:4,fontWeight:500}}>
                       {isHelena ? '🤖 Helena' : '👤 Cliente'}
                     </div>
-                    {texto}
+                    {row.source === 'midia' ? (
+                      <MediaMessage
+                        tipo={row.media.tipo}
+                        media_url={row.media.media_url}
+                        media_filename={row.media.media_filename}
+                        media_duration_sec={row.media.media_duration_sec}
+                        media_caption={row.media.media_caption}
+                      />
+                    ) : (
+                      row.content
+                    )}
                   </div>
                 );
               })}
