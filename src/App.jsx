@@ -2657,6 +2657,17 @@ export default function LeBlancCRM() {
   const [leadTags, setLeadTags] = useState([]);
   const [filtroTags, setFiltroTags] = useState([]);
   const [showTagsModal, setShowTagsModal] = useState(false);
+  const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .schema('leblanc').from('crm_users')
+        .select('vendor_name')
+        .eq('role', 'vendedor')
+        .order('vendor_name');
+      setVendedoresDisponiveis((data || []).map(u => u.vendor_name).filter(Boolean));
+    })();
+  }, []);
 
   const notifEmail = user?.email || session?.user?.email;
 
@@ -2867,16 +2878,12 @@ export default function LeBlancCRM() {
                 {isGerente && (<>
                   <span className="fl">Vendedor</span>
                   <button className={`fb${fv==="all"?" a":""}`} onClick={()=>setFv("all")}>Todos</button>
-                  {VENDORS.map(v=><button key={v} className={`fb${fv===v?" a":""}`} onClick={()=>setFv(fv===v?"all":v)}>{v}</button>)}
+                  {vendedoresDisponiveis.map(v=><button key={v} className={`fb${fv===v?" a":""}`} onClick={()=>setFv(fv===v?"all":v)}>{v}</button>)}
                   <div className="fdiv"/>
                 </>)}
                 <span className="fl">Região</span>
                 <button className={`fb${fr==="all"?" a":""}`} onClick={()=>setFr("all")}>Todas</button>
                 {REGIONS.map(r=><button key={r} className={`fb${fr===r?" a":""}`} onClick={()=>setFr(fr===r?"all":r)}>{r}</button>)}
-                <div className="fdiv"/>
-                <button className={`tb${ft==="hot"?" ha":""}`} onClick={()=>setFt(ft==="hot"?"all":"hot")}>🔥</button>
-                <button className={`tb${ft==="warm"?" wa":""}`} onClick={()=>setFt(ft==="warm"?"all":"warm")}>🌤</button>
-                <button className={`tb${ft==="cold"?" ca":""}`} onClick={()=>setFt(ft==="cold"?"all":"cold")}>❄️</button>
                 <div className="fdiv"/>
                 <FiltroTagsKanban tagsCatalogo={tagsCatalogo} filtroTags={filtroTags} setFiltroTags={setFiltroTags}/>
                 <button
