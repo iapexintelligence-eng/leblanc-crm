@@ -6,8 +6,9 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STAGES = [
-  { id: "novo",         label: "Novo Lead",              colorClass: "" },
-  { id: "sem_resposta", label: "Sem Resposta",           colorClass: "amber" },
+  { id: "novo",               label: "Novo Lead",        colorClass: "" },
+  { id: "analise_diretoria",  label: "Análise Diretoria", colorClass: "purple-dark" },
+  { id: "sem_resposta",       label: "Sem Resposta",     colorClass: "amber" },
   { id: "retorno_helena", label: "Retorno p/ Helena",    colorClass: "purple" },
   { id: "atendimento",  label: "Em Atendimento",         colorClass: "" },
   { id: "aguardando",   label: "Aguardando Informações", colorClass: "" },
@@ -27,7 +28,7 @@ const VENDOR_MAP = {
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
-const PIPELINE_STAGES = ["novo","sem_resposta","retorno_helena","atendimento","aguardando","projeto","apresentacao","negociacao","vendidos","perdido"];
+const PIPELINE_STAGES = ["novo","analise_diretoria","sem_resposta","retorno_helena","atendimento","aguardando","projeto","apresentacao","negociacao","vendidos","perdido"];
 const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
 
 const CSS = `
