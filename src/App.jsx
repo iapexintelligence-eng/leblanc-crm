@@ -1260,10 +1260,22 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
   async function uploadArquivo(e) {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert(`Arquivo muito grande: ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo: 50 MB.`);
+      return;
+    }
     const path = `leads/${lead.id}/${Date.now()}_${file.name}`;
-    const { error } = await supabase.storage.from('leblanc-arquivos').upload(path, file);
-    if (!error) loadArquivos();
-    else alert('Erro no upload');
+    const { error } = await supabase.storage.from('leblanc-arquivos').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || 'application/octet-stream',
+    });
+    if (error) {
+      console.error('Upload arquivo falhou:', error);
+      alert(`Não foi possível enviar o arquivo: ${error.message}`);
+      return;
+    }
+    loadArquivos();
   }
 
   if (!lead) return (
@@ -1356,9 +1368,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
                 onChange={async (e) => {
                   const novoStage = e.target.value;
                   if (novoStage === lead.stage) return;
-                  await supabase.schema('leblanc').from('leads')
+                  const { error } = await supabase.schema('leblanc').from('leads')
                     .update({ stage: novoStage, updated_at: new Date().toISOString() })
                     .eq('id', lead.id);
+                  if (error) {
+                    console.error('Update stage (drawer) falhou:', error);
+                    alert(`Não foi possível atualizar etapa: ${error.message}`);
+                    return;
+                  }
                   const labelDestino = STAGES.find(s => s.id === novoStage)?.label || novoStage;
                   await supabase.from('leblanc_historico_eventos').insert({
                     lead_id: lead.id, tipo: 'mudanca_etapa', acao: `Movido para "${labelDestino}"`, icone: '🔄'
@@ -1385,9 +1402,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
                   value={lead.vendor || ''}
                   onChange={async (e) => {
                     const novoVendedor = e.target.value;
-                    await supabase.schema('leblanc').from('leads')
+                    const { error } = await supabase.schema('leblanc').from('leads')
                       .update({ vendor: novoVendedor, updated_at: new Date().toISOString() })
                       .eq('id', lead.id);
+                    if (error) {
+                      console.error('Update vendor falhou:', error);
+                      alert(`Não foi possível atualizar vendedor: ${error.message}`);
+                      return;
+                    }
                     onUpdate && onUpdate({ ...lead, vendor: novoVendedor });
                   }}
                   style={{width:'100%',border:'none',background:'transparent',fontSize:13,fontWeight:500,cursor:'pointer',padding:0}}>
@@ -1407,9 +1429,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
                 placeholder="Valor que o cliente pretende investir, ex.: 100000"
                 onBlur={async (e) => {
                   const valor = e.target.value === '' ? null : Number(e.target.value);
-                  await supabase.schema('leblanc').from('leads')
+                  const { error } = await supabase.schema('leblanc').from('leads')
                     .update({ valor_estimado: valor, updated_at: new Date().toISOString() })
                     .eq('id', lead.id);
+                  if (error) {
+                    console.error('Update valor_estimado falhou:', error);
+                    alert(`Não foi possível atualizar estimativa: ${error.message}`);
+                    return;
+                  }
                   onUpdate && onUpdate({ ...lead, valor_estimado: valor });
                 }}
                 style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,boxSizing:'border-box'}}
@@ -1420,9 +1447,14 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
               <div style={{display:'flex',gap:8}}>
                 {['hot','warm','cold'].map(t => (
                   <button key={t} onClick={async () => {
-                    await supabase.schema('leblanc').from('leads')
+                    const { error } = await supabase.schema('leblanc').from('leads')
                       .update({ temperature: t, updated_at: new Date().toISOString() })
                       .eq('id', lead.id);
+                    if (error) {
+                      console.error('Update temperature falhou:', error);
+                      alert(`Não foi possível atualizar temperatura: ${error.message}`);
+                      return;
+                    }
                     onUpdate && onUpdate({ ...lead, temperature: t });
                   }} style={{
                     padding:'4px 12px', borderRadius:20, border:'1px solid', fontSize:12, cursor:'pointer',
@@ -2733,9 +2765,14 @@ export default function LeBlancCRM() {
     const idx = STAGES.findIndex(s => s.id === lead.stage);
     if (idx === -1 || idx >= STAGES.length - 2) return;
     const nextStage = STAGES[idx + 1].id;
-    await supabase.schema('leblanc').from('leads')
+    const { error } = await supabase.schema('leblanc').from('leads')
       .update({ stage: nextStage, updated_at: new Date().toISOString() })
       .eq('id', lead.id);
+    if (error) {
+      console.error('handleAdvance falhou:', error);
+      alert(`Não foi possível avançar etapa: ${error.message}`);
+      return;
+    }
     setLeads(prev => prev.map(l =>
       l.id === lead.id ? { ...l, stage: nextStage } : l
     ));
@@ -2948,7 +2985,13 @@ export default function LeBlancCRM() {
                         onDragOver={e=>e.preventDefault()}
                         onDrop={async()=>{
                           if(!dragging) return;
-                          await supabase.schema('leblanc').from('leads').update({stage:stage.id,updated_at:new Date().toISOString()}).eq('id',dragging);
+                          const { error } = await supabase.schema('leblanc').from('leads').update({stage:stage.id,updated_at:new Date().toISOString()}).eq('id',dragging);
+                          if (error) {
+                            console.error('onDrop kanban (update stage) falhou:', error);
+                            alert(`Não foi possível mover o lead: ${error.message}`);
+                            setDragging(null);
+                            return;
+                          }
                           const labelDestino = STAGES.find(s => s.id === stage.id)?.label || stage.id;
                           await supabase.from('leblanc_historico_eventos').insert({
                             lead_id: dragging,
