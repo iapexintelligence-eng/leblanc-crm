@@ -1007,7 +1007,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead 
   );
 }
 
-function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag }) {
+function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag, vendedoresDisponiveis = [] }) {
   const [tab, setTab] = useState('ficha');
   const [conversas, setConversas] = useState([]);
   const [vendorConversas, setVendorConversas] = useState([]);
@@ -1415,8 +1415,8 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
                   }}
                   style={{width:'100%',border:'none',background:'transparent',fontSize:13,fontWeight:500,cursor:'pointer',padding:0}}>
                   <option value="">Sem vendedor</option>
-                  {['Tayne','Murilo','Andriely','Bruna','Leticia'].map(v=>(
-                    <option key={v} value={v}>{v}</option>
+                  {vendedoresDisponiveis.map(nome=>(
+                    <option key={nome} value={nome}>{nome}</option>
                   ))}
                 </select>
               </div>
@@ -3031,7 +3031,8 @@ export default function LeBlancCRM() {
                     tagsCatalogo={tagsCatalogo}
                     tagsDoLead={selected ? getTagsDoLead(selected.id) : []}
                     onAdicionarTag={adicionarTagLead}
-                    onRemoverTag={removerTagLead}/>
+                    onRemoverTag={removerTagLead}
+                    vendedoresDisponiveis={vendedoresDisponiveis}/>
                 </div>
               </div>
             </>
