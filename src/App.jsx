@@ -1021,6 +1021,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
   const [notes, setNotes] = useState('');
   const [observacoes, setObservacoes] = useState([]);
   const [novaObs, setNovaObs] = useState('');
+  const [valorLocal, setValorLocal] = useState('');
   const [salvandoObs, setSalvandoObs] = useState(false);
   const [helenaChats, setHelenaChats] = useState([]);
   const [helenaHistory, setHelenaHistory] = useState([]);
@@ -1029,6 +1030,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
   const convRef = useRef(null);
 
   useEffect(() => { setNotes(lead?.notes || ''); }, [lead?.id]);
+  useEffect(() => { setValorLocal(lead?.valor_estimado != null ? String(lead.valor_estimado) : ''); }, [lead?.id]);
 
   useEffect(() => { if (lead?.id) loadObservacoes(); }, [lead?.id]);
 
@@ -1425,20 +1427,24 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
               <div style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:6}}>Estimativa de investimento — preencher após o briefing (R$)</div>
               <input
                 type="number"
-                key={lead.id}
-                defaultValue={lead.valor_estimado || ''}
+                value={valorLocal}
+                onChange={(e) => setValorLocal(e.target.value)}
                 placeholder="Valor que o cliente pretende investir, ex.: 100000"
-                onBlur={async (e) => {
-                  const valor = e.target.value === '' ? null : Number(e.target.value);
-                  const { error } = await supabase.schema('leblanc').from('leads')
-                    .update({ valor_estimado: valor, updated_at: new Date().toISOString() })
+                onBlur={async () => {
+                  const novoValor = valorLocal === '' ? null : Number(valorLocal);
+                  if (novoValor === lead.valor_estimado) return;
+                  const valorAnterior = lead.valor_estimado;
+                  const { error } = await supabase
+                    .schema('leblanc').from('leads')
+                    .update({ valor_estimado: novoValor, updated_at: new Date().toISOString() })
                     .eq('id', lead.id);
                   if (error) {
-                    console.error('Update valor_estimado falhou:', error);
-                    alert(`Não foi possível atualizar estimativa: ${error.message}`);
+                    console.error('[update valor_estimado] falhou:', error);
+                    alert(`Não foi possível salvar: ${error.message}`);
+                    setValorLocal(valorAnterior != null ? String(valorAnterior) : '');
                     return;
                   }
-                  onUpdate && onUpdate({ ...lead, valor_estimado: valor });
+                  onUpdate && onUpdate({ ...lead, valor_estimado: novoValor });
                 }}
                 style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,boxSizing:'border-box'}}
               />
