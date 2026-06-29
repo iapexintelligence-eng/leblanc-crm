@@ -1797,7 +1797,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
   );
 }
 
-function Reports({ leads, isGerente, vendorName }) {
+function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
   const VENDORS = Object.keys(VENDOR_MAP);
 
   const [parados, setParados] = useState([]);
@@ -2410,7 +2410,7 @@ function Reports({ leads, isGerente, vendorName }) {
               <select value={fVendPerd} onChange={e=>setFVendPerd(e.target.value)}
                 style={{fontSize:11,padding:'3px 8px',border:'1px solid var(--border)',borderRadius:6,background:'#fff',cursor:'pointer'}}>
                 <option value="todos">Todos os vendedores</option>
-                {VENDORS.map(v=><option key={v} value={v}>{v}</option>)}
+                {vendedoresDisponiveis.map(nome=><option key={nome} value={nome}>{nome}</option>)}
               </select>
             </div>
             {(() => {
@@ -2871,7 +2871,7 @@ export default function LeBlancCRM() {
           </div>
 
           {activePage === "reports" ? (
-            <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name}/>
+            <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name} vendedoresDisponiveis={vendedoresDisponiveis}/>
           ) : activePage === "tarefas" ? (
             <PaginaTarefas
               userVendorName={user?.vendor_name}
@@ -2958,7 +2958,7 @@ export default function LeBlancCRM() {
                           <select value={newLead.vendor} onChange={e=>setNewLead(p=>({...p,vendor:e.target.value}))}
                             style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:4,fontSize:13,fontFamily:"'Jost',sans-serif",outline:'none',background:'#fff'}}>
                             <option value="">— Não atribuído</option>
-                            {VENDORS.map(v=><option key={v} value={v}>{v}</option>)}
+                            {vendedoresDisponiveis.map(nome=><option key={nome} value={nome}>{nome}</option>)}
                           </select>
                         </div>
                       )}
