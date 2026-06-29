@@ -1874,7 +1874,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
     const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
     const esperado = META * (hoje.getDate() / diasNoMes);
     const ehNovo = a => !['apresentacao_2','apresentacao_3'].includes(a.tipo) && a.status !== 'cancelado';
-    return VENDORS.map(v => {
+    return vendedoresDisponiveis.map(v => {
       const novos = ags.filter(a => {
         if (a.vendor !== v || !ehNovo(a) || !a.data_hora) return false;
         const d = new Date(a.data_hora);
@@ -1893,7 +1893,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
     const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate()+diffSeg); inicioSemana.setHours(0,0,0,0);
     const fimSemana = new Date(inicioSemana); fimSemana.setDate(inicioSemana.getDate()+7);
     const semanaFimVis = new Date(fimSemana); semanaFimVis.setDate(semanaFimVis.getDate()-1);
-    const linhas = VENDORS.map(v => {
+    const linhas = vendedoresDisponiveis.map(v => {
       const ativos = leads.filter(l => l.vendor === v && !['vendidos','perdido'].includes(l.stage)).length;
       const recebidosMes = leads.filter(l => {
         if (l.vendor !== v || !l.created_at) return false;
@@ -1959,7 +1959,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
   }, [isGerente]);
 
   const vendorValores = useMemo(() => {
-    return VENDORS.map(v => {
+    return vendedoresDisponiveis.map(v => {
       const vLeads = leads.filter(l => l.vendor === v);
       const carteira = vLeads.filter(l => PIPELINE_STAGES.includes(l.stage)).reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
       const convertido = vLeads.filter(l => l.stage === 'vendidos').reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
@@ -1973,7 +1973,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
   const minhaCarteira = leads.filter(l => PIPELINE_STAGES.includes(l.stage)).reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
   const meuConvertido = leads.filter(l => l.stage === 'vendidos').reduce((s,l)=> s + (Number(l.valor_estimado)||0), 0);
 
-  const vendorStats = useMemo(() => VENDORS.map(v => {
+  const vendorStats = useMemo(() => vendedoresDisponiveis.map(v => {
     const vLeads = leads.filter(l => l.vendor === v);
     const fechados = vLeads.filter(l => l.stage === "vendidos").length;
     const perdidos = vLeads.filter(l => l.stage === "perdido").length;
@@ -2185,11 +2185,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
                 <select value={fHistVend} onChange={e=>setFHistVend(e.target.value)}
                   style={{fontSize:11,padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--light)'}}>
                   <option value="todos">Todas vendedoras</option>
-                  <option value="Murilo">Murilo</option>
-                  <option value="Bruna">Bruna</option>
-                  <option value="Tayne">Tayne</option>
-                  <option value="Leticia">Letícia</option>
-                  <option value="Andriely">Andriely</option>
+                  {vendedoresDisponiveis.map(nome=><option key={nome} value={nome}>{nome}</option>)}
                 </select>
               </div>
             </div>
