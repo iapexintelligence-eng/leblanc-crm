@@ -1918,12 +1918,21 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
   const [resumoMes, setResumoMes] = useState(null);
   const [resumoMesAtual, setResumoMesAtual] = useState('');
   const [funilTempo, setFunilTempo] = useState([]);
+  const [metaRealizado, setMetaRealizado] = useState([]);
+  const [projecao, setProjecao] = useState([]);
+  const [historicoMensal, setHistoricoMensal] = useState([]);
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
-        .from('leblanc_funil_tempo_medio')
-        .select('*');
-      if (!error && data) setFunilTempo(data);
+      const [a, b, c, d] = await Promise.all([
+        supabase.from('leblanc_funil_tempo_medio').select('*'),
+        supabase.from('leblanc_meta_realizado').select('*'),
+        supabase.from('leblanc_projecao_vendedora').select('*'),
+        supabase.from('leblanc_historico_vendas_mensal').select('*'),
+      ]);
+      if (a.data) setFunilTempo(a.data);
+      if (b.data) setMetaRealizado(b.data);
+      if (c.data) setProjecao(c.data);
+      if (d.data) setHistoricoMensal(d.data);
     })();
   }, []);
   const [activeTab, setActiveTab] = useState('operacional');
@@ -2272,6 +2281,86 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
             )}
           </div>
         )}
+        {activeTab === 'performance' && isGerente && (
+          <div className="report-card full">
+            <div className="report-title">🎯 Meta vs Realizado (mês atual)</div>
+            <div style={{fontSize:12,color:'var(--muted)',marginBottom:16,lineHeight:1.5}}>
+              Meta mensal: R$ 100.000 por vendedora. Vendas contam a partir do momento que o lead vai pra "Vendidos".
+            </div>
+            {metaRealizado.length === 0 ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem dados ainda</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {metaRealizado.map(v => {
+                  const pct = Number(v.percentual);
+                  const cor = pct >= 100 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                  const larguraBarra = Math.min(pct, 100);
+                  return (
+                    <div key={v.vendedora}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}}>
+                        <span style={{fontWeight:600}}>{v.vendedora}</span>
+                        <span>
+                          <strong style={{color:cor}}>{brl(v.realizado)}</strong>
+                          <span style={{color:'#999'}}> / {brl(v.meta_mensal)}</span>
+                          <span style={{marginLeft:8,fontSize:12,color:cor,fontWeight:600}}>{v.percentual}%</span>
+                        </span>
+                      </div>
+                      <div style={{background:'#eee',borderRadius:4,overflow:'hidden',height:8}}>
+                        <div style={{width:`${larguraBarra}%`,height:'100%',background:cor,transition:'width 0.3s'}}/>
+                      </div>
+                      {pct < 100 && (
+                        <div style={{fontSize:11,color:'#999',marginTop:2}}>
+                          Faltam {brl(v.falta)} pra bater meta
+                        </div>
+                      )}
+                      {pct >= 100 && (
+                        <div style={{fontSize:11,color:'#10b981',marginTop:2}}>
+                          ✓ Meta batida (+{brl(Number(v.realizado) - Number(v.meta_mensal))} acima)
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === 'performance' && isGerente && (
+          <div className="report-card full">
+            <div className="report-title">📈 Projeção do Pipeline</div>
+            <div style={{fontSize:12,color:'var(--muted)',marginBottom:16,lineHeight:1.5}}>
+              Estimativa baseada nos leads ativos × probabilidade de fechamento por etapa.
+              <br/>
+              <span style={{fontSize:11,fontStyle:'italic'}}>
+                Probabilidades: novo 5% • atendimento 20% • aguardando 30% • projeto 50% • apresentação 65% • negociação 80%
+              </span>
+            </div>
+            {projecao.length === 0 ? (
+              <div style={{textAlign:'center',padding:'16px 0',color:'var(--faint)',fontSize:11}}>Sem dados ainda</div>
+            ) : (
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}>
+                  <thead>
+                    <tr style={{color:'var(--muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid var(--border)'}}>
+                      <th style={{padding:'8px 6px',textAlign:'left'}}>Vendedora</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Leads ativos</th>
+                      <th style={{padding:'8px 6px',textAlign:'right'}}>Projeção</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projecao.map(v => (
+                      <tr key={v.vendedora} style={{borderBottom:'1px solid var(--border)'}}>
+                        <td style={{padding:'8px 6px',fontWeight:600}}>{v.vendedora}</td>
+                        <td style={{padding:'8px 6px',textAlign:'right',color:'#666'}}>{v.leads_ativos}</td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontWeight:600,color:'#3b82f6'}}>{brl(v.projecao)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === 'performance' && (
           <div className="report-card full">
             <div className="report-title">⏱️ Tempo médio por etapa</div>
@@ -2499,6 +2588,51 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
             </div>
           </div>
         )}
+        {activeTab === 'performance' && isGerente && (() => {
+          const meses = [...new Set(historicoMensal.map(h => h.mes_label))].slice(0, 6);
+          const vendedoras = [...new Set(historicoMensal.map(h => h.vendedora))];
+          const getValor = (vend, mes) => {
+            const row = historicoMensal.find(h => h.vendedora === vend && h.mes_label === mes);
+            return row?.valor_total || 0;
+          };
+          return (
+            <div className="report-card full">
+              <div className="report-title">📊 Histórico de vendas por mês</div>
+              <div style={{fontSize:12,color:'var(--muted)',marginBottom:16,lineHeight:1.5}}>
+                Vendas fechadas (movidas pra "Vendidos") nos últimos 6 meses.
+              </div>
+              {historicoMensal.length === 0 ? (
+                <div style={{textAlign:'center',padding:'32px 0',color:'var(--faint)',fontSize:11}}>Sem histórico ainda</div>
+              ) : (
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',fontSize:13,borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr style={{color:'var(--muted)',fontSize:9,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:'1px solid var(--border)'}}>
+                        <th style={{padding:'8px 6px',textAlign:'left'}}>Vendedora</th>
+                        {meses.map(m => <th key={m} style={{padding:'8px 6px',textAlign:'right'}}>{m}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vendedoras.map(v => (
+                        <tr key={v} style={{borderBottom:'1px solid var(--border)'}}>
+                          <td style={{padding:'8px 6px',fontWeight:600}}>{v}</td>
+                          {meses.map(m => {
+                            const valor = getValor(v, m);
+                            return (
+                              <td key={m} style={{padding:'8px 6px',textAlign:'right'}}>
+                                {valor > 0 ? brl(valor) : <span style={{color:'#ccc'}}>—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {activeTab === 'performance' && (
         <div className="report-card full">
           <div className="report-title">Leads por vendedor — taxa de conversão</div>
