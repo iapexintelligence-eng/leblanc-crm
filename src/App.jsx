@@ -266,6 +266,14 @@ const CSS = `
   .region-count{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--black);}
 `;
 
+function sanitizeFilename(name) {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_');
+}
+
 async function pedirPermissaoNotificacoes() {
   if (!('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
@@ -1267,7 +1275,8 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
       alert(`Arquivo muito grande: ${(file.size / 1024 / 1024).toFixed(1)} MB. Máximo: 50 MB.`);
       return;
     }
-    const path = `leads/${lead.id}/${Date.now()}_${file.name}`;
+    const safeName = sanitizeFilename(file.name);
+    const path = `leads/${lead.id}/${Date.now()}_${safeName}`;
     const { error } = await supabase.storage.from('leblanc-arquivos').upload(path, file, {
       cacheControl: '3600',
       upsert: false,
