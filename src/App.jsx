@@ -1884,22 +1884,34 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
     }).sort((a,b) => b.novos - a.novos);
   }, [ags]);
 
+  const [painelRecebidosMes, setPainelRecebidosMes] = useState([]);
+  useEffect(() => {
+    (async () => {
+      const inicioMes = new Date();
+      inicioMes.setDate(1);
+      inicioMes.setHours(0, 0, 0, 0);
+      const mesISO = inicioMes.toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from('leblanc_relatorio_mensal')
+        .select('vendor,recebidos')
+        .eq('mes', mesISO);
+      if (error) console.error('[painelRecebidosMes] falhou:', error);
+      setPainelRecebidosMes(data || []);
+    })();
+  }, []);
+
   const painelOperacional = useMemo(() => {
     const hoje = new Date();
-    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1, 0,0,0,0);
-    const inicioProxMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 1, 0,0,0,0);
     const dow = hoje.getDay();
     const diffSeg = dow === 0 ? -6 : 1 - dow;
     const inicioSemana = new Date(hoje); inicioSemana.setDate(hoje.getDate()+diffSeg); inicioSemana.setHours(0,0,0,0);
     const fimSemana = new Date(inicioSemana); fimSemana.setDate(inicioSemana.getDate()+7);
     const semanaFimVis = new Date(fimSemana); semanaFimVis.setDate(semanaFimVis.getDate()-1);
+    const recebidosPorVendor = {};
+    painelRecebidosMes.forEach(r => { recebidosPorVendor[r.vendor] = Number(r.recebidos) || 0; });
     const linhas = vendedoresDisponiveis.map(v => {
       const ativos = leads.filter(l => l.vendor === v && !['vendidos','perdido'].includes(l.stage)).length;
-      const recebidosMes = leads.filter(l => {
-        if (l.vendor !== v || !l.created_at) return false;
-        const d = new Date(l.created_at);
-        return d >= inicioMes && d < inicioProxMes;
-      }).length;
+      const recebidosMes = recebidosPorVendor[v] || 0;
       const agendSemana = ags.filter(a => {
         if (a.vendor !== v || a.status === 'cancelado' || !a.data_hora) return false;
         const d = new Date(a.data_hora);
@@ -1910,7 +1922,7 @@ function Reports({ leads, isGerente, vendorName, vendedoresDisponiveis = [] }) {
     const fmtDM = d => d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
     const mesNome = hoje.toLocaleDateString('pt-BR',{month:'long'});
     return { linhas, mesNome, semanaIni: fmtDM(inicioSemana), semanaFim: fmtDM(semanaFimVis) };
-  }, [leads, ags]);
+  }, [leads, ags, vendedoresDisponiveis, painelRecebidosMes]);
 
   const [histMensal, setHistMensal] = useState([]);
   const [fHistVend, setFHistVend] = useState('todos');
@@ -2906,12 +2918,34 @@ export default function LeBlancCRM() {
     return true;
   }), [leads, fv, fr, ft, search, filtroTags, leadTags]);
 
-  const kpis = useMemo(() => ({
-    total: leads.length,
-    quentes: leads.filter(l => l.temperature === "hot").length,
-    pipeline: leads.filter(l => l.stage !== "perdido").length,
-    fechados: leads.filter(l => l.stage === "vendidos").length,
-  }), [leads]);
+  const [fechadosMesCount, setFechadosMesCount] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const inicioMes = new Date();
+      inicioMes.setDate(1);
+      inicioMes.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('leblanc_historico_eventos')
+        .select('*', { count: 'exact', head: true })
+        .eq('tipo', 'mudanca_etapa')
+        .ilike('acao', '%vendido%')
+        .gte('created_at', inicioMes.toISOString());
+      setFechadosMesCount(count || 0);
+    })();
+  }, []);
+
+  const kpis = useMemo(() => {
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+    const semDesfecho = l => !['vendidos','perdido'].includes(l.stage);
+    return {
+      novosMes: leads.filter(l => l.created_at && new Date(l.created_at) >= inicioMes).length,
+      quentes: leads.filter(l => l.temperature === "hot" && semDesfecho(l)).length,
+      pipeline: leads.filter(semDesfecho).length,
+      fechadosMes: fechadosMesCount,
+    };
+  }, [leads, fechadosMesCount]);
 
   const handleUpdate = (updated) => {
     setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
@@ -2974,7 +3008,7 @@ export default function LeBlancCRM() {
           </div>
           <div className="sbox">
             <div className="sr"><span className="sl">Total leads</span><span className="sv">{leads.length}</span></div>
-            <div className="sr"><span className="sl">Conversão</span><span className="sv">{leads.length?Math.round((kpis.fechados/leads.length)*100):0}%</span></div>
+            <div className="sr"><span className="sl">Conversão</span><span className="sv">{leads.length?Math.round((leads.filter(l=>l.stage==='vendidos').length/leads.length)*100):0}%</span></div>
             <div className="sr"><span className="sl">Quentes</span><span className="sv">{kpis.quentes}</span></div>
           </div>
           <button className="logout-btn" onClick={()=>supabase.auth.signOut()}>⎋ Sair</button>
@@ -3003,10 +3037,10 @@ export default function LeBlancCRM() {
           </div>
 
           <div className="kpis">
-            <div className="kpi"><div className="klabel">Total de leads</div><div className="kval">{kpis.total}</div><div className="kdelta">no CRM</div></div>
+            <div className="kpi"><div className="klabel">Novos este mês</div><div className="kval">{kpis.novosMes}</div><div className="kdelta">este mês</div></div>
             <div className="kpi hi"><div className="klabel">Leads quentes</div><div className="kval">{kpis.quentes}</div><div className="kdelta">alta prioridade</div></div>
             <div className="kpi"><div className="klabel">No funil</div><div className="kval">{kpis.pipeline}</div><div className="kdelta">ativos</div></div>
-            <div className="kpi"><div className="klabel">Fechados</div><div className="kval">{kpis.fechados}</div><div className="kdelta green">convertidos</div></div>
+            <div className="kpi"><div className="klabel">Fechados este mês</div><div className="kval">{kpis.fechadosMes}</div><div className="kdelta green">este mês</div></div>
           </div>
 
           {activePage === "reports" ? (
