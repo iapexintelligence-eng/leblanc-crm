@@ -418,6 +418,41 @@ function NotificationBell({ notifications, naoLidas, onItemClick, onMarcarTodas 
   );
 }
 
+const FONTE_ATIVIDADE_ICONS = {
+  conversa: '💬',
+  evento: '📋',
+  agendamento: '📅',
+  observacao: '📝',
+  edicao_lead: '✏️',
+};
+const FONTE_ATIVIDADE_LABELS = {
+  conversa: 'conversa WhatsApp',
+  evento: 'evento no histórico',
+  agendamento: 'agendamento',
+  observacao: 'observação',
+  edicao_lead: 'edição do card',
+};
+
+function IndicadorAtividade({ lead }) {
+  const dias = lead.dias_desde_ultima_atividade;
+  if (dias == null) return null;
+  const icon = FONTE_ATIVIDADE_ICONS[lead.ultima_fonte] || '•';
+  let texto;
+  if (dias < 1/24) texto = 'agora';
+  else if (dias < 1) texto = `${Math.floor(dias * 24)}h`;
+  else if (dias < 30) texto = `${Math.floor(dias)}d`;
+  else texto = `${Math.floor(dias/30)}mês`;
+  const cor = dias < 3 ? '#059669' : dias < 7 ? '#f59e0b' : '#dc2626';
+  return (
+    <span
+      title={lead.ultima_atividade ? `Última interação: ${new Date(lead.ultima_atividade).toLocaleString('pt-BR')} (${lead.ultima_fonte})` : undefined}
+      style={{ fontSize: 11, color: cor, fontWeight: 500 }}
+    >
+      {icon} {texto}
+    </span>
+  );
+}
+
 function TagPill({ nome, cor, size = 'sm', onRemove }) {
   const styles = {
     sm: { fontSize: 10, padding: '2px 8px', borderRadius: 10 },
@@ -985,9 +1020,6 @@ function MediaMessage({ tipo, media_url, media_filename, media_duration_sec, med
 function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead = [] }) {
   const tcls = { hot:"th", warm:"tw", cold:"tc" }[lead.temperature] || "tc";
   const tlabel = { hot:"Quente", warm:"Morno", cold:"Frio" }[lead.temperature] || "Frio";
-  const ts = new Date(lead.updated_at);
-  const diff = Math.floor((Date.now() - ts) / 60000);
-  const ago = diff < 60 ? `${diff}min` : diff < 1440 ? `${Math.floor(diff/60)}h` : `${Math.floor(diff/1440)}d`;
   return (
     <div className={`lcard${selected?" sel":""}`} onClick={onClick} draggable={true} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="ctop">
@@ -1007,7 +1039,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead 
       <div className="cbot">
         <div className="btag">{lead.budget||"—"}</div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span className="ctime">{ago}</span>
+          <IndicadorAtividade lead={lead}/>
           <VendorAvatar name={lead.vendor}/>
         </div>
       </div>
@@ -1336,6 +1368,15 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
               <span>·</span>
               <span>{lead.vendor}</span>
             </div>
+            {lead.dias_desde_ultima_atividade != null && (
+              <div style={{fontSize:12,color:'#6b7280',marginTop:4}}>
+                {FONTE_ATIVIDADE_ICONS[lead.ultima_fonte] || '•'} Última interação: {
+                  lead.dias_desde_ultima_atividade < 1
+                    ? 'hoje'
+                    : `há ${Math.floor(lead.dias_desde_ultima_atividade)} dia${Math.floor(lead.dias_desde_ultima_atividade) > 1 ? 's' : ''}`
+                } — {FONTE_ATIVIDADE_LABELS[lead.ultima_fonte] || 'atividade'}
+              </div>
+            )}
           </div>
           <button onClick={onClose}
             style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--muted)',padding:'4px 8px'}}>✕</button>
