@@ -1,5 +1,7 @@
+import CentralComercial from "./CentralComercial.jsx";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import ComercialCliente from "./ComercialCliente.jsx";
 
 const SUPABASE_URL = "https://kptgtftvyiyxynxkpmaw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwdGd0ZnR2eWl5eHlueGtwbWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxOTQwOTUsImV4cCI6MjA4NDc3MDA5NX0.PTARgU61ku6He-WTza6k3muDeAuTsP21yjODbraXxr0";
@@ -1330,6 +1332,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
 
   const TABS = [
     { id:'ficha', label:'Ficha' },
+    { id:'comercial', label:'Orçamento e contrato' },
     { id:'helena', label:'Helena' },
     { id:'conversa', label:'Conversa' },
     { id:'tarefas', label:'Tarefas' },
@@ -1406,6 +1409,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
       }}>
 
         {/* ── FICHA ── */}
+        {tab==='comercial' && <ComercialCliente key={lead.id} lead={lead} />}
         {tab==='ficha' && (
           <div>
             <TagsDoLead
@@ -3037,7 +3041,7 @@ export default function LeBlancCRM() {
             <div className="logo-sub">Pipeline de Vendas</div>
           </div>
           <nav className="nav">
-            {[["pipeline","Pipeline"],["tarefas","Tarefas"],["reports","Relatórios"]].map(([id,label])=>(
+            {[["pipeline","Pipeline"],["orcamentos","Orçamentos"],["contratos","Contratos"],["tarefas","Tarefas"],["reports","Relatórios"]].map(([id,label])=>(
               <div key={id} className={`nav-item${activePage===id?" active":""}`} onClick={()=>{ setActivePage(id); setSelected(null); }}>
                 <div className="nav-dot"/>{label}
               </div>
@@ -3057,7 +3061,7 @@ export default function LeBlancCRM() {
 
         <div className="main">
           <div className="topbar">
-            <div className="tbtitle">{activePage==="reports"?"Relatórios":"Pipeline de Vendas"}</div>
+            <div className="tbtitle">{({reports:"Relatórios",orcamentos:"Orçamentos",contratos:"Contratos",tarefas:"Tarefas"})[activePage]||"Pipeline de Vendas"}</div>
             <div className="tbr">
               <div className="sbox2">
                 <span className="search-icon">⌕</span>
@@ -3084,7 +3088,9 @@ export default function LeBlancCRM() {
             <div className="kpi"><div className="klabel">Fechados este mês</div><div className="kval">{kpis.fechadosMes}</div><div className="kdelta green">este mês</div></div>
           </div>
 
-          {activePage === "reports" ? (
+          {["orcamentos","contratos"].includes(activePage) ? (
+            <CentralComercial key={activePage} tipo={activePage} leads={leads}/>
+          ) : activePage === "reports" ? (
             <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name} vendedoresDisponiveis={vendedoresDisponiveis}/>
           ) : activePage === "tarefas" ? (
             <PaginaTarefas
