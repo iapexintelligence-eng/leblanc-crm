@@ -2,6 +2,7 @@ import CentralComercial from "./CentralComercial.jsx";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import ComercialCliente from "./ComercialCliente.jsx";
+import PaginaBaixas, { useBaixasPendentes } from "./PaginaBaixas.jsx";
 
 const SUPABASE_URL = "https://kptgtftvyiyxynxkpmaw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwdGd0ZnR2eWl5eHlueGtwbWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxOTQwOTUsImV4cCI6MjA4NDc3MDA5NX0.PTARgU61ku6He-WTza6k3muDeAuTsP21yjODbraXxr0";
@@ -1049,7 +1050,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead 
   );
 }
 
-function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag, vendedoresDisponiveis = [] }) {
+function Drawer({ lead, user, onClose, onUpdate, onAdvance, onAgendamentoChange, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag, vendedoresDisponiveis = [] }) {
   const [tab, setTab] = useState('ficha');
   const [conversas, setConversas] = useState([]);
   const [vendorConversas, setVendorConversas] = useState([]);
@@ -1126,7 +1127,7 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, tagsCatalogo = [], t
       .from('leblanc_agendamentos')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', id);
-    if (!error) loadAgendamentos();
+    if (!error) { loadAgendamentos(); onAgendamentoChange && onAgendamentoChange(); }
   }
 
   async function loadArquivos() {
@@ -2872,6 +2873,7 @@ export default function LeBlancCRM() {
   }, []);
 
   const notifEmail = user?.email || session?.user?.email;
+  const { pendentes: baixasPendentes, recarregar: recarregarBaixas } = useBaixasPendentes(supabase, user);
 
   async function carregarTags() {
     const [{ data: tags }, { data: relacoes }] = await Promise.all([
@@ -2963,19 +2965,21 @@ export default function LeBlancCRM() {
     return true;
   }), [leads, fv, fr, ft, search, filtroTags, leadTags]);
 
-  const [fechadosMesCount, setFechadosMesCount] = useState(0);
+  // Leads movidos para "Vendidos" neste mês. O KPI conta só os que CONTINUAM em Vendidos
+  // (um card arrastado por engano e tirado depois não conta) e cada cliente uma vez só.
+  const [movidosVendidosMes, setMovidosVendidosMes] = useState([]);
   useEffect(() => {
     (async () => {
       const inicioMes = new Date();
       inicioMes.setDate(1);
       inicioMes.setHours(0, 0, 0, 0);
-      const { count } = await supabase
+      const { data } = await supabase
         .from('leblanc_historico_eventos')
-        .select('*', { count: 'exact', head: true })
+        .select('lead_id')
         .eq('tipo', 'mudanca_etapa')
-        .ilike('acao', '%vendido%')
+        .ilike('acao', '%"Vendidos"%')
         .gte('created_at', inicioMes.toISOString());
-      setFechadosMesCount(count || 0);
+      setMovidosVendidosMes([...new Set((data || []).map(e => e.lead_id))]);
     })();
   }, []);
 
@@ -2988,9 +2992,9 @@ export default function LeBlancCRM() {
       novosMes: leads.filter(l => l.created_at && new Date(l.created_at) >= inicioMes).length,
       quentes: leads.filter(l => l.temperature === "hot" && semDesfecho(l)).length,
       pipeline: leads.filter(semDesfecho).length,
-      fechadosMes: fechadosMesCount,
+      fechadosMes: leads.filter(l => l.stage === 'vendidos' && movidosVendidosMes.includes(l.id)).length,
     };
-  }, [leads, fechadosMesCount]);
+  }, [leads, movidosVendidosMes]);
 
   const handleUpdate = (updated) => {
     setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
@@ -3041,9 +3045,12 @@ export default function LeBlancCRM() {
             <div className="logo-sub">Pipeline de Vendas</div>
           </div>
           <nav className="nav">
-            {[["pipeline","Pipeline"],["orcamentos","Orçamentos"],["contratos","Contratos"],["tarefas","Tarefas"],["reports","Relatórios"]].map(([id,label])=>(
-              <div key={id} className={`nav-item${activePage===id?" active":""}`} onClick={()=>{ setActivePage(id); setSelected(null); }}>
+            {[["pipeline","Pipeline"],["baixas","Dar baixa"],["orcamentos","Orçamentos"],["contratos","Contratos"],["tarefas","Tarefas"],["reports","Relatórios"]].map(([id,label])=>(
+              <div key={id} className={`nav-item${activePage===id?" active":""}`} onClick={()=>{ setActivePage(id); setSelected(null); if (id==="baixas") recarregarBaixas(); }}>
                 <div className="nav-dot"/>{label}
+                {id==="baixas" && baixasPendentes.length>0 && (
+                  <span style={{marginLeft:'auto',background:'#c0392b',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:600,letterSpacing:0}}>{baixasPendentes.length}</span>
+                )}
               </div>
             ))}
           </nav>
@@ -3061,7 +3068,7 @@ export default function LeBlancCRM() {
 
         <div className="main">
           <div className="topbar">
-            <div className="tbtitle">{({reports:"Relatórios",orcamentos:"Orçamentos",contratos:"Contratos",tarefas:"Tarefas"})[activePage]||"Pipeline de Vendas"}</div>
+            <div className="tbtitle">{({reports:"Relatórios",orcamentos:"Orçamentos",contratos:"Contratos",tarefas:"Tarefas",baixas:"Dar baixa"})[activePage]||"Pipeline de Vendas"}</div>
             <div className="tbr">
               <div className="sbox2">
                 <span className="search-icon">⌕</span>
@@ -3092,6 +3099,14 @@ export default function LeBlancCRM() {
             <CentralComercial key={activePage} tipo={activePage} leads={leads}/>
           ) : activePage === "reports" ? (
             <Reports leads={leads} isGerente={isGerente} vendorName={user?.vendor_name} vendedoresDisponiveis={vendedoresDisponiveis}/>
+          ) : activePage === "baixas" ? (
+            <PaginaBaixas
+              supabase={supabase}
+              user={user}
+              pendentes={baixasPendentes}
+              recarregar={recarregarBaixas}
+              abrirLead={abrirLead}
+            />
           ) : activePage === "tarefas" ? (
             <PaginaTarefas
               userVendorName={user?.vendor_name}
@@ -3100,6 +3115,12 @@ export default function LeBlancCRM() {
             />
           ) : (
             <>
+              {!isGerente && baixasPendentes.length > 0 && (
+                <div onClick={()=>{ setActivePage("baixas"); setSelected(null); recarregarBaixas(); }}
+                  style={{padding:'10px 20px',background:'#fdecea',borderBottom:'1px solid #f5c6c0',color:'#a3281b',fontSize:13,cursor:'pointer'}}>
+                  ⚠️ Você tem <b>{baixasPendentes.length}</b> {baixasPendentes.length===1?'atendimento':'atendimentos'} sem baixa. Clique aqui para informar o que aconteceu.
+                </div>
+              )}
               <div className="filters">
                 {isGerente && (<>
                   <span className="fl">Vendedor</span>
@@ -3253,7 +3274,7 @@ export default function LeBlancCRM() {
                   })}
                 </div>
                 <div className={`drawer${!selected?" closed":""}`}>
-                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance}
+                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance} onAgendamentoChange={recarregarBaixas}
                     tagsCatalogo={tagsCatalogo}
                     tagsDoLead={selected ? getTagsDoLead(selected.id) : []}
                     onAdicionarTag={adicionarTagLead}
