@@ -2812,12 +2812,23 @@ function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [modo, setModo] = useState("entrar"); // "entrar" | "esqueci"
+  const [aviso, setAviso] = useState("");
   const handleLogin = async () => {
     setLoading(true); setError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setError("E-mail ou senha incorretos.");
     setLoading(false);
   };
+  const pedirLink = async () => {
+    if (!email.trim()) { setError("Digite seu e-mail."); return; }
+    setLoading(true); setError(""); setAviso("");
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+    if (error) setError("Não foi possível enviar agora. Tente de novo em alguns minutos.");
+    else setAviso("Se esse e-mail tiver acesso, você vai receber um link para criar uma senha nova. Confira também o spam.");
+    setLoading(false);
+  };
+  const linkLeve = { background: "none", border: "none", color: "#bbb", cursor: "pointer", marginTop: 12, fontSize: 13, textDecoration: "underline", width: "100%" };
   return (
     <>
       <style>{CSS}</style>
@@ -2831,10 +2842,55 @@ function LoginScreen() {
           </div>
           <div className="login-divider"/>
           <label className="login-label">E-mail</label>
-          <input className="login-input" type="email" placeholder="seu@leblancinteriores.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-          <label className="login-label">Senha</label>
-          <input className="login-input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-          <button className="login-btn" onClick={handleLogin} disabled={loading}>{loading?"Entrando...":"Entrar"}</button>
+          <input className="login-input" type="email" placeholder="seu@leblancinteriores.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(modo==="entrar"?handleLogin():pedirLink())}/>
+          {modo === "entrar" ? (<>
+            <label className="login-label">Senha</label>
+            <input className="login-input" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+            <button className="login-btn" onClick={handleLogin} disabled={loading}>{loading?"Entrando...":"Entrar"}</button>
+            <button style={linkLeve} onClick={()=>{setModo("esqueci");setError("");}}>Esqueci minha senha</button>
+          </>) : (<>
+            <button className="login-btn" onClick={pedirLink} disabled={loading}>{loading?"Enviando...":"Enviar link para o e-mail"}</button>
+            {aviso && <div className="login-error" style={{color:"#2e7d32"}}>{aviso}</div>}
+            <button style={linkLeve} onClick={()=>{setModo("entrar");setError("");setAviso("");}}>Voltar para o login</button>
+          </>)}
+          {error && <div className="login-error">{error}</div>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function NovaSenhaScreen({ onPronto }) {
+  const [senha, setSenha] = useState("");
+  const [senha2, setSenha2] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const salvar = async () => {
+    if (senha.length < 8) { setError("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (senha !== senha2) { setError("As duas senhas não são iguais."); return; }
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.updateUser({ password: senha });
+    setLoading(false);
+    if (error) { setError("Não foi possível salvar. Peça um link novo e tente de novo."); return; }
+    onPronto();
+  };
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="login-wrap">
+        <div className="login-box">
+          <div className="login-logo-wrap">
+            <div className="login-logo-box">
+              <div className="login-logo">Le <span style={{display:"inline",letterSpacing:".22em"}}>Blanc</span></div>
+            </div>
+            <div className="login-tagline">Criar senha nova · vale para o CRM e o Inbox</div>
+          </div>
+          <div className="login-divider"/>
+          <label className="login-label">Senha nova</label>
+          <input className="login-input" type="password" autoComplete="new-password" value={senha} onChange={e=>setSenha(e.target.value)}/>
+          <label className="login-label">Repita a senha</label>
+          <input className="login-input" type="password" autoComplete="new-password" value={senha2} onChange={e=>setSenha2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&salvar()}/>
+          <button className="login-btn" onClick={salvar} disabled={loading}>{loading?"Salvando...":"Salvar senha"}</button>
           {error && <div className="login-error">{error}</div>}
         </div>
       </div>
@@ -2844,6 +2900,7 @@ function LoginScreen() {
 
 export default function LeBlancCRM() {
   const [session, setSession] = useState(null);
+  const [recuperando, setRecuperando] = useState(false); // veio do link "esqueci minha senha"
   const [user, setUser] = useState(null);
   const [leads, setLeads] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -2925,7 +2982,10 @@ export default function LeBlancCRM() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((evento, s) => {
+      if (evento === "PASSWORD_RECOVERY") setRecuperando(true);
+      setSession(s);
+    });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -3019,6 +3079,7 @@ export default function LeBlancCRM() {
     setSelected(prev => prev ? { ...prev, stage: nextStage } : null);
   }
 
+  if (session && recuperando) return <NovaSenhaScreen onPronto={()=>setRecuperando(false)}/>;
   if (!session) return <LoginScreen/>;
   if (loading) return <><style>{CSS}</style><div className="loading">Carregando pipeline...</div></>;
 
