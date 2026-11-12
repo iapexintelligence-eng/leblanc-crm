@@ -18,6 +18,7 @@ const STAGES = [
   { id: "projeto",      label: "Desenvolvendo Projeto",  colorClass: "" },
   { id: "apresentacao", label: "Apresentação",           colorClass: "" },
   { id: "negociacao",   label: "Negociação",             colorClass: "" },
+  { id: "standby",      label: "Standby",                colorClass: "amber" },
   { id: "vendidos",     label: "Vendidos",               colorClass: "green" },
   { id: "perdido",      label: "Perdido",                colorClass: "red" },
 ];
@@ -31,8 +32,90 @@ const VENDOR_MAP = {
 };
 
 const REGIONS = ["Curitiba", "RMC", "Litoral PR/SC"];
-const PIPELINE_STAGES = ["novo","analise_diretoria","sem_resposta","retorno_helena","atendimento","aguardando","projeto","apresentacao","negociacao","vendidos","perdido"];
+const PIPELINE_STAGES = ["novo","analise_diretoria","sem_resposta","retorno_helena","atendimento","aguardando","projeto","apresentacao","negociacao","standby","vendidos","perdido"];
 const stageNext = (id) => { const i = STAGES.findIndex(s => s.id === id); return i < STAGES.length - 1 ? STAGES[i + 1] : null; };
+
+// ── Standby: cliente pausado pelo vendedor, com motivo e data de retorno obrigatórios ──
+const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const fmtDataBR = (iso) => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '—';
+const diasAteRetorno = (iso) => iso ? Math.round((new Date(iso.slice(0,10) + 'T12:00:00') - new Date(hojeISO() + 'T12:00:00')) / 86400000) : null;
+
+// Muda a etapa de um lead. Para "standby" pede motivo e data antes. Retorna o lead atualizado ou null.
+async function mudarEtapaLead(lead, novoStage, pedirStandby) {
+  const payload = { stage: novoStage, updated_at: new Date().toISOString() };
+  let detalhe = '';
+  if (novoStage === 'standby') {
+    const info = await pedirStandby(lead);
+    if (!info) return null;
+    payload.standby_motivo = info.motivo;
+    payload.standby_retorno = info.retorno;
+    detalhe = ` — retorno ${fmtDataBR(info.retorno)}. Motivo: ${info.motivo}`;
+  }
+  const { data, error } = await supabase.schema('leblanc').from('leads')
+    .update(payload).eq('id', lead.id).select('*').single();
+  if (error) {
+    console.error('mudarEtapaLead falhou:', error);
+    alert(`Não foi possível mover o lead: ${error.message}`);
+    return null;
+  }
+  const labelDestino = STAGES.find(s => s.id === novoStage)?.label || novoStage;
+  await supabase.from('leblanc_historico_eventos').insert({
+    lead_id: lead.id, tipo: 'mudanca_etapa', acao: `Movido para "${labelDestino}"${detalhe}`,
+    icone: novoStage === 'standby' ? '⏸️' : '🔄'
+  });
+  return { ...lead, ...data };
+}
+
+function StandbyModal({ pedido, onConfirmar, onCancelar }) {
+  const [motivo, setMotivo] = useState(pedido?.lead?.standby_motivo || '');
+  const [retorno, setRetorno] = useState(pedido?.lead?.standby_retorno || '');
+  if (!pedido) return null;
+  const hoje = hojeISO();
+  const valido = motivo.trim().length >= 3 && retorno && retorno >= hoje;
+  const atalho = (dias) => { const d = new Date(hoje + 'T12:00:00'); d.setDate(d.getDate() + dias); setRetorno(d.toISOString().slice(0, 10)); };
+  const inp = {width:'100%',padding:'9px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,fontFamily:"'Jost',sans-serif"};
+  return (
+    <div onClick={onCancelar} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:10,padding:22,width:'100%',maxWidth:420,boxShadow:'0 12px 32px rgba(0,0,0,0.2)'}}>
+        <div style={{fontSize:16,fontWeight:600,marginBottom:4}}>⏸️ Colocar em Standby</div>
+        <div style={{fontSize:12,color:'var(--muted)',marginBottom:16}}>{pedido.lead?.name}</div>
+        <label style={{fontSize:11,fontWeight:600,letterSpacing:'.06em',color:'var(--muted)'}}>MOTIVO *</label>
+        <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={3} autoFocus
+          placeholder="Ex.: obra atrasada, cliente viajando, aguardando liberação do financiamento…"
+          style={{...inp,resize:'vertical',marginTop:4,marginBottom:14}}/>
+        <label style={{fontSize:11,fontWeight:600,letterSpacing:'.06em',color:'var(--muted)'}}>RETOMAR CONTATO EM *</label>
+        <input type="date" value={retorno} min={hoje} onChange={e => setRetorno(e.target.value)} style={{...inp,marginTop:4}}/>
+        <div style={{display:'flex',gap:6,marginTop:8,marginBottom:18,flexWrap:'wrap'}}>
+          {[[7,'1 semana'],[15,'15 dias'],[30,'30 dias'],[60,'60 dias'],[90,'90 dias']].map(([d, r]) => (
+            <button key={d} type="button" onClick={() => atalho(d)}
+              style={{padding:'4px 10px',fontSize:11,border:'1px solid var(--border)',borderRadius:12,background:'#fff',cursor:'pointer'}}>{r}</button>
+          ))}
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+          <button onClick={onCancelar} style={{padding:'8px 16px',fontSize:12,border:'1px solid var(--border)',borderRadius:4,background:'#fff',cursor:'pointer'}}>Cancelar</button>
+          <button disabled={!valido} onClick={() => onConfirmar({ motivo: motivo.trim(), retorno })}
+            style={{padding:'8px 18px',fontSize:12,fontWeight:500,border:'none',borderRadius:4,background:valido?'var(--black)':'#ccc',color:'#fff',cursor:valido?'pointer':'not-allowed'}}>
+            Colocar em Standby
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StandbyBadge({ lead, completo = false }) {
+  if (lead.stage !== 'standby' || !lead.standby_retorno) return null;
+  const d = diasAteRetorno(lead.standby_retorno);
+  const vencido = d < 0, hoje = d === 0;
+  const cor = vencido ? 'var(--red)' : hoje ? 'var(--amber)' : 'var(--muted)';
+  const texto = vencido ? `Retomar — atrasado ${-d} dia${d < -1 ? 's' : ''}` : hoje ? 'Retomar hoje' : `Retomar em ${fmtDataBR(lead.standby_retorno)}`;
+  return (
+    <div style={{marginTop:6,fontSize:11,color:cor,fontWeight:vencido||hoje?600:400}}>
+      ⏸️ {texto}
+      {completo && lead.standby_motivo && <div style={{color:'var(--muted)',fontWeight:400,marginTop:2}}>Motivo: {lead.standby_motivo}</div>}
+    </div>
+  );
+}
 
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap');
@@ -362,8 +445,8 @@ function NotificationToasts({ toasts, onClick }) {
   return (
     <div style={{position:'fixed',top:20,right:20,zIndex:9999,display:'flex',flexDirection:'column',gap:8,maxWidth:360}}>
       {toasts.map(t => {
-        const cor = t.tipo === 'agendamento_1h' ? '#f59e0b' : t.tipo === 'retorno_helena' ? '#9333ea' : '#3b82f6';
-        const icone = t.tipo === 'agendamento_1h' ? '⏰' : t.tipo === 'retorno_helena' ? '🔄' : '👤';
+        const cor = t.tipo === 'agendamento_1h' ? '#f59e0b' : t.tipo === 'retorno_helena' ? '#9333ea' : t.tipo === 'standby_retorno' ? '#b7791f' : '#3b82f6';
+        const icone = t.tipo === 'agendamento_1h' ? '⏰' : t.tipo === 'retorno_helena' ? '🔄' : t.tipo === 'standby_retorno' ? '⏸️' : '👤';
         return (
           <div key={t.id} onClick={() => onClick(t)}
             style={{background:'white',borderLeft:`4px solid ${cor}`,borderRadius:8,padding:'12px 16px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',cursor:t.lead_id?'pointer':'default'}}>
@@ -404,7 +487,7 @@ function NotificationBell({ notifications, naoLidas, onItemClick, onMarcarTodas 
             <div style={{padding:24,textAlign:'center',color:'#999',fontSize:13}}>Nenhuma notificação</div>
           ) : (
             notifications.map(n => {
-              const icone = n.tipo === 'agendamento_1h' ? '⏰' : n.tipo === 'retorno_helena' ? '🔄' : '👤';
+              const icone = n.tipo === 'agendamento_1h' ? '⏰' : n.tipo === 'retorno_helena' ? '🔄' : n.tipo === 'standby_retorno' ? '⏸️' : '👤';
               return (
                 <div key={n.id} onClick={() => { onItemClick(n); setOpen(false); }}
                   style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',cursor:'pointer',background:n.lida?'white':'#eff6ff'}}>
@@ -1033,6 +1116,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead 
         <div className="mrow"><span>◎</span><span>{lead.city||"—"}</span></div>
         <div className="mrow"><span>◈</span><span>{lead.product||"—"}</span></div>
       </div>
+      <StandbyBadge lead={lead}/>
       {tagsDoLead.length > 0 && (
         <div style={{display:'flex',gap:4,marginTop:6,marginBottom:6,flexWrap:'wrap'}}>
           {tagsDoLead.slice(0,3).map(t => <TagPill key={t.id} nome={t.nome} cor={t.cor} size="sm" />)}
@@ -1050,7 +1134,7 @@ function LeadCard({ lead, selected, onClick, onDragStart, onDragEnd, tagsDoLead 
   );
 }
 
-function Drawer({ lead, user, onClose, onUpdate, onAdvance, onAgendamentoChange, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag, vendedoresDisponiveis = [] }) {
+function Drawer({ lead, user, onClose, onUpdate, onAdvance, onPedirStandby, onAgendamentoChange, tagsCatalogo = [], tagsDoLead = [], onAdicionarTag, onRemoverTag, vendedoresDisponiveis = [] }) {
   const [tab, setTab] = useState('ficha');
   const [conversas, setConversas] = useState([]);
   const [vendorConversas, setVendorConversas] = useState([]);
@@ -1426,23 +1510,34 @@ function Drawer({ lead, user, onClose, onUpdate, onAdvance, onAgendamentoChange,
                 onChange={async (e) => {
                   const novoStage = e.target.value;
                   if (novoStage === lead.stage) return;
-                  const { error } = await supabase.schema('leblanc').from('leads')
-                    .update({ stage: novoStage, updated_at: new Date().toISOString() })
-                    .eq('id', lead.id);
-                  if (error) {
-                    console.error('Update stage (drawer) falhou:', error);
-                    alert(`Não foi possível atualizar etapa: ${error.message}`);
-                    return;
-                  }
-                  const labelDestino = STAGES.find(s => s.id === novoStage)?.label || novoStage;
-                  await supabase.from('leblanc_historico_eventos').insert({
-                    lead_id: lead.id, tipo: 'mudanca_etapa', acao: `Movido para "${labelDestino}"`, icone: '🔄'
-                  });
-                  onUpdate && onUpdate({ ...lead, stage: novoStage });
+                  const atualizado = await mudarEtapaLead(lead, novoStage, onPedirStandby);
+                  if (atualizado) onUpdate && onUpdate(atualizado);
                 }}
                 style={{width:'100%',padding:'8px 10px',border:'1px solid var(--border)',borderRadius:6,fontSize:13,fontWeight:500,background:'#fff',cursor:'pointer'}}>
                 {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
+              {lead.stage === 'standby' && (
+                <div style={{marginTop:8,padding:'10px 12px',background:'var(--amber-bg)',border:'1px solid rgba(183,121,31,0.25)',borderRadius:6}}>
+                  <StandbyBadge lead={lead} completo/>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Em standby desde {fmtDataBR(lead.standby_desde)} · para retomar, escolha a etapa acima</div>
+                  <button onClick={async () => {
+                      const info = await onPedirStandby(lead);
+                      if (!info) return;
+                      const { data, error } = await supabase.schema('leblanc').from('leads')
+                        .update({ standby_motivo: info.motivo, standby_retorno: info.retorno, updated_at: new Date().toISOString() })
+                        .eq('id', lead.id).select('*').single();
+                      if (error) { alert(`Não foi possível atualizar o standby: ${error.message}`); return; }
+                      await supabase.from('leblanc_historico_eventos').insert({
+                        lead_id: lead.id, tipo: 'standby_alterado', icone: '⏸️',
+                        acao: `Standby atualizado — retorno ${fmtDataBR(info.retorno)}. Motivo: ${info.motivo}`
+                      });
+                      onUpdate && onUpdate({ ...lead, ...data });
+                    }}
+                    style={{marginTop:8,padding:'5px 12px',fontSize:11,border:'1px solid var(--border)',borderRadius:4,background:'#fff',cursor:'pointer'}}>
+                    Alterar motivo / data de retorno
+                  </button>
+                </div>
+              )}
             </div>
             <div style={S.sectionTitle}>FICHA DO CLIENTE</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
@@ -2911,6 +3006,9 @@ export default function LeBlancCRM() {
   const [ft, setFt] = useState("all");
   const [activePage, setActivePage] = useState("pipeline");
   const [dragging, setDragging] = useState(null);
+  const [pedidoStandby, setPedidoStandby] = useState(null);
+  const pedirStandby = (lead) => new Promise(resolve => setPedidoStandby({ lead, resolve }));
+  const fecharStandby = (info) => { pedidoStandby?.resolve(info); setPedidoStandby(null); };
   const [showNewLead, setShowNewLead] = useState(false);
   const [newLead, setNewLead] = useState({ name:'', phone:'', region:'', city:'', product:'', budget:'', vendor:'', temperature:'cold' });
   const [tagsCatalogo, setTagsCatalogo] = useState([]);
@@ -3062,9 +3160,11 @@ export default function LeBlancCRM() {
   };
 
   async function handleAdvance(lead) {
+    if (lead.stage === 'standby') { alert('Para retomar um cliente em Standby, escolha a etapa em "Etapa no funil".'); return; }
     const idx = STAGES.findIndex(s => s.id === lead.stage);
     if (idx === -1 || idx >= STAGES.length - 2) return;
-    const nextStage = STAGES[idx + 1].id;
+    let nextStage = STAGES[idx + 1].id;
+    if (nextStage === 'standby') nextStage = STAGES[idx + 2].id; // "Avançar" nunca coloca em standby
     const { error } = await supabase.schema('leblanc').from('leads')
       .update({ stage: nextStage, updated_at: new Date().toISOString() })
       .eq('id', lead.id);
@@ -3091,6 +3191,7 @@ export default function LeBlancCRM() {
     <>
       <style>{CSS}</style>
       <NotificationToasts toasts={toasts} onClick={handleNotificationClick}/>
+      {pedidoStandby && <StandbyModal key={pedidoStandby.lead?.id} pedido={pedidoStandby} onConfirmar={fecharStandby} onCancelar={() => fecharStandby(null)}/>}
       {showTagsModal && (
         <ModalGerenciarTags
           tagsCatalogo={tagsCatalogo}
@@ -3301,22 +3402,13 @@ export default function LeBlancCRM() {
                         onDragOver={e=>e.preventDefault()}
                         onDrop={async()=>{
                           if(!dragging) return;
-                          const { error } = await supabase.schema('leblanc').from('leads').update({stage:stage.id,updated_at:new Date().toISOString()}).eq('id',dragging);
-                          if (error) {
-                            console.error('onDrop kanban (update stage) falhou:', error);
-                            alert(`Não foi possível mover o lead: ${error.message}`);
-                            setDragging(null);
-                            return;
-                          }
-                          const labelDestino = STAGES.find(s => s.id === stage.id)?.label || stage.id;
-                          await supabase.from('leblanc_historico_eventos').insert({
-                            lead_id: dragging,
-                            tipo: 'mudanca_etapa',
-                            acao: `Movido para "${labelDestino}"`,
-                            icone: '🔄'
-                          });
-                          setLeads(p=>p.map(l=>l.id===dragging?{...l,stage:stage.id}:l));
+                          const leadArrastado = leads.find(l => l.id === dragging);
                           setDragging(null);
+                          if (!leadArrastado || leadArrastado.stage === stage.id) return;
+                          const atualizado = await mudarEtapaLead(leadArrastado, stage.id, pedirStandby);
+                          if (!atualizado) return;
+                          setLeads(p=>p.map(l=>l.id===atualizado.id?atualizado:l));
+                          if (selected?.id === atualizado.id) setSelected(atualizado);
                         }}>
                         <div className="ch">
                           <div className="ct">{stage.label}</div>
@@ -3335,7 +3427,7 @@ export default function LeBlancCRM() {
                   })}
                 </div>
                 <div className={`drawer${!selected?" closed":""}`}>
-                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance} onAgendamentoChange={recarregarBaixas}
+                  <Drawer lead={selected} user={user} onClose={()=>setSelected(null)} onUpdate={handleUpdate} onAdvance={handleAdvance} onPedirStandby={pedirStandby} onAgendamentoChange={recarregarBaixas}
                     tagsCatalogo={tagsCatalogo}
                     tagsDoLead={selected ? getTagsDoLead(selected.id) : []}
                     onAdicionarTag={adicionarTagLead}
